@@ -16,3 +16,6 @@ __pycache__/
 .ruff_cache/
 build/
 dist/
+
+# Personal application queue
+queue/
