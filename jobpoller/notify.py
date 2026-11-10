@@ -1,0 +1,89 @@
+"""Best-effort notifications after a run. Failing to notify must never fail the run."""
+
+from __future__ import annotations
+
+import shutil
+import subprocess
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+
+import httpx
+
+from .models import Match
+
+
+@dataclass
+class NotifyConfig:
+    threshold: int = 80  # notify when any new job has LLM fit >= this
+    desktop: bool = True  # notify-send
+    ntfy: str = ""  # full topic URL, e.g. https://ntfy.sh/my-private-topic; empty = off
+
+
+Runner = Callable[..., "subprocess.CompletedProcess[bytes]"]
+
+
+def summarize(matches: Sequence[Match], threshold: int) -> tuple[str, str] | None:
+    """(title, body) for the strong matches, or None. Keyword-only jobs have no fit: skipped."""
+    strong = [m for m in matches if m.ranking is not None and m.ranking.fit >= threshold]
+    if not strong:
+        return None
+    best = max(strong, key=lambda m: m.sort_key)
+    plural = "match" if len(strong) == 1 else "matches"
+    title = f"jobpoller: {len(strong)} strong {plural}"
+    fit = best.ranking.fit if best.ranking else 0
+    return title, f"Top: {best.job.title[:80]} @ {best.job.company} (fit {fit})"
+
+
+def notify(
+    cfg: NotifyConfig,
+    matches: Sequence[Match],
+    client: httpx.Client,
+    runner: Runner | None = None,
+) -> list[str]:
+    """Send notifications; returns warnings instead of raising."""
+    message = summarize(matches, cfg.threshold)
+    if message is None:
+        return []
+    title, body = message
+    warnings: list[str] = []
+    try:
+        if cfg.desktop:
+            warnings += _desktop(title, body, runner or subprocess.run)
+        if cfg.ntfy:
+            warnings += _ntfy(cfg.ntfy, title, body, client)
+    except Exception as exc:  # noqa: BLE001 - contract: a notification bug never fails a run
+        warnings.append(f"notify: unexpected error: {exc!r}")
+    return warnings
+
+
+def _desktop(title: str, body: str, runner: Runner) -> list[str]:
+    if shutil.which("notify-send") is None:
+        return ["notify: notify-send not found (install libnotify) or set notify.desktop: false"]
+    try:
+        done = runner(
+            ["notify-send", "--app-name=jobpoller", title, body],
+            capture_output=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return [f"notify: notify-send failed: {exc!r}"]
+    if done.returncode != 0:
+        detail = done.stderr.decode("utf-8", "replace").strip()[:200]
+        return [f"notify: notify-send exited {done.returncode}: {detail}"]
+    return []
+
+
+def _ntfy(url: str, title: str, body: str, client: httpx.Client) -> list[str]:
+    try:
+        # HTTP headers are latin-1; keep the title safe and put full text in the body.
+        response = client.post(
+            url,
+            content=body.encode("utf-8"),
+            headers={"Title": title.encode("ascii", "replace").decode("ascii")},
+            timeout=10.0,
+        )
+        response.raise_for_status()
+    except httpx.HTTPError as exc:
+        return [f"notify: ntfy failed: {exc}"]
+    return []
