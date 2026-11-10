@@ -8,9 +8,11 @@ from pathlib import Path
 
 import httpx
 
+from .bench import compare, format_report, run_bench
 from .config import Config, ConfigError, load_config
-from .pipeline import run
+from .pipeline import RunReport, collect, run
 from .ranker import LLMUnavailable, Ranker
+from .scoring import score_job
 from .sources import BoardError, fetch_board
 
 
@@ -55,6 +57,46 @@ def _check(config: Config, client: httpx.Client, ranker: Ranker | None) -> int:
     return 1 if bad else 0
 
 
+def _bench(
+    config: Config,
+    client: httpx.Client,
+    models: list[str],
+    count: int,
+    transport: httpx.BaseTransport | None,
+) -> int:
+    resume_path = config.llm.resume_path
+    if resume_path is None:
+        raise ConfigError("bench needs llm.resume (path to your resume as .md/.txt)")
+    resume = resume_path.read_text(encoding="utf-8")
+    now = datetime.now(timezone.utc)
+    scored = [
+        (j, s)
+        for j in collect(config, client, RunReport())
+        if (s := score_job(j, config.criteria, now)) is not None
+    ]
+    scored.sort(key=lambda p: (-p[1], p[0].key))  # deterministic: both models see the same jobs
+    jobs = [j for j, _ in scored[:count]]
+    if not jobs:
+        print("no jobs matched your criteria; nothing to benchmark", file=sys.stderr)
+        return 1
+    print(f"ranking {len(jobs)} jobs with {', '.join(models)} (cold start included in 'cold')")
+    try:
+        runs = run_bench(
+            config.llm,
+            resume,
+            jobs,
+            models,
+            lambda: httpx.Client(timeout=config.llm.timeout_seconds, transport=transport),
+            log=print,
+        )
+    except LLMUnavailable as exc:
+        print(f"FAIL  llm: {exc}", file=sys.stderr)
+        return 1
+    print()
+    print(format_report(compare(runs, {j.key: f"{j.title} @ {j.company}" for j in jobs})))
+    return 0
+
+
 def main(argv: list[str] | None = None, transport: httpx.BaseTransport | None = None) -> int:
     parser = argparse.ArgumentParser(prog="jobpoller", description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -67,6 +109,10 @@ def main(argv: list[str] | None = None, transport: httpx.BaseTransport | None = 
     )
     check_p = sub.add_parser("check", help="verify each board slug and the LLM respond")
     check_p.add_argument("--config", type=Path, default=Path("config.yaml"))
+    bench_p = sub.add_parser("bench", help="compare Ollama models on the same jobs")
+    bench_p.add_argument("--config", type=Path, default=Path("config.yaml"))
+    bench_p.add_argument("--models", required=True, help="comma-separated, e.g. qwen3:8b,qwen3:14b")
+    bench_p.add_argument("-n", "--count", type=int, default=20, help="jobs to rank (default 20)")
     args = parser.parse_args(argv)
 
     try:
@@ -80,6 +126,12 @@ def main(argv: list[str] | None = None, transport: httpx.BaseTransport | None = 
         with _client(config.user_agent, transport) as client:
             if args.cmd == "check":
                 return _check(config, client, ranker)
+            if args.cmd == "bench":
+                models = [m.strip() for m in args.models.split(",") if m.strip()]
+                if len(models) < 2 or args.count < 1:
+                    print("bench needs at least two --models and -n >= 1", file=sys.stderr)
+                    return 2
+                return _bench(config, client, models, args.count, transport)
             report = run(config, client, datetime.now(timezone.utc), args.dry_run, ranker)
     finally:
         if ranker is not None:
