@@ -8,6 +8,7 @@ rather than silently downgraded.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from collections.abc import Callable
 
@@ -117,10 +118,25 @@ def _m3_meta(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
 
 
+def _m4_posting_text(conn: sqlite3.Connection) -> None:
+    # Keep the full posting for queued jobs (jobs_cache is pruned) so `show` and companion
+    # tools can read it long after the board has taken the posting down.
+    conn.execute("ALTER TABLE seen ADD COLUMN description TEXT NOT NULL DEFAULT ''")
+    conn.execute("ALTER TABLE seen ADD COLUMN posted_at TEXT")
+    # Backfill from the cache where it still has the job.
+    for key, raw in conn.execute("SELECT key, job FROM jobs_cache").fetchall():
+        job = json.loads(raw)
+        conn.execute(
+            "UPDATE seen SET description = ?, posted_at = ? WHERE key = ?",
+            (job.get("description", ""), job.get("posted_at"), key),
+        )
+
+
 MIGRATIONS: list[Callable[[sqlite3.Connection], None]] = [
     _m1_initial,
     _m2_status_and_cache,
     _m3_meta,
+    _m4_posting_text,
 ]
 
 

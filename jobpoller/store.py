@@ -90,8 +90,8 @@ class Store:
         with self._tx():
             cur = self._conn.execute(
                 "INSERT OR IGNORE INTO seen (key, first_seen, company, title, url, score, source, "
-                "location, fit, summary, red_flags, status_updated) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "location, fit, summary, red_flags, status_updated, description, posted_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     job.key,
                     now.isoformat(),
@@ -105,6 +105,8 @@ class Store:
                     ranking.summary if ranking else "",
                     json.dumps(list(ranking.red_flags)) if ranking else "[]",
                     now.isoformat(),
+                    job.description,
+                    job.posted_at.isoformat() if job.posted_at else None,
                 ),
             )
         return cur.rowcount == 1
@@ -120,6 +122,14 @@ class Store:
     def get(self, job_id: int) -> QueuedJob | None:
         row = self._conn.execute(f"SELECT {_COLS} FROM seen WHERE id = ?", (job_id,)).fetchone()
         return _queued(row) if row else None
+
+    def posting(self, job_id: int) -> tuple[str, str | None] | None:
+        """(full posting text, posted_at ISO) for a queued job; kept apart from QueuedJob
+        because the text is large and `list` never needs it."""
+        row = self._conn.execute(
+            "SELECT description, posted_at FROM seen WHERE id = ?", (job_id,)
+        ).fetchone()
+        return None if row is None else (str(row[0]), None if row[1] is None else str(row[1]))
 
     def list_jobs(self, status: str | None = None, min_fit: int | None = None) -> list[QueuedJob]:
         """Best first. `min_fit` and the ordering use LLM fit, else the keyword score."""

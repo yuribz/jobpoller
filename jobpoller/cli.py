@@ -190,6 +190,59 @@ def _cmd_list(config: Config, status: str | None, min_fit: int | None, verbose: 
     return 0
 
 
+SHOW_SCHEMA_VERSION = 1  # bump on any breaking change to `show --json` (companion tools read it)
+
+
+def _cmd_show(config: Config, job_id: int, as_json: bool) -> int:
+    store = Store(config.db)
+    try:
+        job = store.get(job_id)
+        posting = store.posting(job_id)
+    finally:
+        store.close()
+    if job is None or posting is None:
+        print(f"error: no job with id {job_id} (see `jobpoller list`)", file=sys.stderr)
+        return 1
+    description, posted_at = posting
+    if as_json:
+        print(
+            json.dumps(
+                {
+                    "schema_version": SHOW_SCHEMA_VERSION,
+                    "id": job.id,
+                    "status": job.status,
+                    "company": job.company,
+                    "title": job.title,
+                    "url": job.url,
+                    "source": job.source,
+                    "location": job.location,
+                    "posted_at": posted_at,
+                    "first_seen": job.first_seen,
+                    "fit": job.fit,
+                    "keyword_score": job.score,
+                    "summary": job.summary,
+                    "red_flags": list(job.red_flags),
+                    "description": description,
+                },
+                indent=2,
+                ensure_ascii=False,
+            )
+        )
+        return 0
+    label = f"fit {job.fit}" if job.fit is not None else f"kw {job.score}"
+    print(f"{job.title} @ {job.company}  [{job.status}, {label}]")
+    print(f"{job.location or 'location unknown'}  |  {job.source}  |  {job.url}")
+    if job.summary:
+        print(f"\nAI summary: {job.summary}")
+    if job.red_flags:
+        print(f"Flags: {'; '.join(job.red_flags)}")
+    if description:
+        print(f"\n{description}")
+    else:
+        print("\n(no posting text stored for this job; open the link)")
+    return 0
+
+
 def _cmd_init(
     config_path: Path,
     assume_yes: bool,
@@ -362,6 +415,10 @@ def _parser() -> argparse.ArgumentParser:
     list_p.add_argument("--min-fit", type=int, help="LLM fit (keyword score if LLM was off)")
     list_p.add_argument("-v", "--verbose", action="store_true", help="show link and summary")
 
+    show_p = sub.add_parser("show", parents=[common], help="print one job with its full posting")
+    show_p.add_argument("id", type=int, help="id from `jobpoller list`")
+    show_p.add_argument("--json", action="store_true", help="machine-readable (for other tools)")
+
     dig = sub.add_parser("digest", parents=[common], help="write a static digest.html")
     dig.add_argument("--open", action="store_true", help="open it in your browser")
     dig.add_argument("--since", type=_since, help="only jobs first seen within e.g. 7d")
@@ -410,6 +467,8 @@ def main(
         return _cmd_status(config, args.cmd, args.ids, now)
     if args.cmd == "list":
         return _cmd_list(config, args.status, args.min_fit, args.verbose)
+    if args.cmd == "show":
+        return _cmd_show(config, args.id, args.json)
     if args.cmd == "digest":
         return _cmd_digest(config, args, now)
     if args.cmd == "tune":

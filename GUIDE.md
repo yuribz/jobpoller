@@ -135,6 +135,17 @@ jobpoller dismiss 5 9          # not interested, never shown again
 jobpoller applied 3            # you applied
 ```
 
+To read one job in full (the whole posting, not just the summary):
+
+```bash
+jobpoller show 3               # readable: header, AI summary, flags, full posting text
+jobpoller show 3 --json        # same data for other tools (see below)
+```
+
+The posting text is saved when a job is queued, so it stays readable after the company takes
+the posting down. Jobs queued before this feature get their text filled in only if it was still
+in the recent-jobs cache; otherwise `show` says to open the link.
+
 Handy variations:
 
 ```bash
@@ -265,6 +276,7 @@ jobs they disagree on most. On the reference machine (RX 7900 GRE) `qwen3:14b` t
 | `check` | Does every board slug (and the AI model) respond? |
 | `run [--dry-run]` | Fetch, filter, score, queue new matches |
 | `list [--status S] [--min-fit N] [-v]` | Show queued jobs, best first |
+| `show ID [--json]` | One job with its full posting text |
 | `promote ID...` | Add to your queue file, mark promoted |
 | `dismiss ID...` | Hide for good |
 | `applied ID...` | Mark applied |
@@ -306,3 +318,14 @@ Start with `jobpoller init`; it names the problem and the fix for most of these.
 - Calls to Ollama on `localhost`. Your resume and the AI scores never go anywhere else.
 - Only if you set `notify.ntfy`: the top job's title is sent to that notification server.
   It's off by default.
+
+---
+
+## 10. For companion tools: `show --json`
+
+Other programs (for example a resume tailor) should read jobs through
+`jobpoller show ID --json`, not the SQLite file; the schema is internal and may change. The
+output is one JSON object with `schema_version: 1` and these keys: `id`, `status`, `company`,
+`title`, `url`, `source`, `location`, `posted_at` (ISO or null), `first_seen`, `fit` (integer or
+null), `keyword_score`, `summary`, `red_flags` (list), `description` (plain text, may be empty).
+A breaking change bumps `schema_version`. An unknown id exits 1 with the error on stderr.
