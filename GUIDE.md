@@ -146,6 +146,32 @@ The posting text is saved when a job is queued, so it stays readable after the c
 the posting down. Jobs queued before this feature get their text filled in only if it was still
 in the recent-jobs cache; otherwise `show` says to open the link.
 
+### Adding a posting yourself (LinkedIn, an email, a friend's tip)
+
+jobpoller never fetches LinkedIn or any other page for you. You save the posting, it reads the
+file:
+
+```bash
+# 1. On the posting page: select the description, copy it, save as job.txt / job.md
+#    (or "Save Page As" -> job.html)
+jobpoller add job.txt --company "Acme" --title "Backend Engineer" \
+    --url "https://www.linkedin.com/jobs/view/3812345678/"
+pbpaste | jobpoller add --company "Acme" --title "Backend Engineer" --url "..."   # from stdin
+jobpoller add job.html --url "..." --promote     # also puts it in your queue file
+```
+
+- Accepts `.txt`, `.md` and `.html` (a PDF or .docx: convert to text first, e.g. `pdftotext`).
+- Saved HTML pages that contain the standard `JobPosting` data (LinkedIn, many company sites)
+  fill in company, title, location and date by themselves; flags override. Scripts, menus
+  and page chrome are dropped.
+- The link is cleaned (tracking parameters removed, LinkedIn links reduced to
+  `/jobs/view/<id>/`). Adding the same link again, or a link the poller already found, changes
+  nothing.
+- The AI scores it against your resume (`--no-score` to skip; if the AI is down it is added
+  unscored). Your keyword filters never reject it, since you picked it.
+- It then behaves like any other job: `list`, `show`, `promote`, `dismiss`, `applied`, and
+  `show --json` for companion tools. Its source is `manual`.
+
 Handy variations:
 
 ```bash
@@ -277,6 +303,7 @@ jobs they disagree on most. On the reference machine (RX 7900 GRE) `qwen3:14b` t
 | `run [--dry-run]` | Fetch, filter, score, queue new matches |
 | `list [--status S] [--min-fit N] [-v]` | Show queued jobs, best first |
 | `show ID [--json]` | One job with its full posting text |
+| `add [FILE] --company --title --url [--promote] [--no-score]` | Add a posting you saved (txt, md, html) |
 | `promote ID...` | Add to your queue file, mark promoted |
 | `dismiss ID...` | Hide for good |
 | `applied ID...` | Mark applied |
@@ -326,6 +353,6 @@ Start with `jobpoller init`; it names the problem and the fix for most of these.
 Other programs (for example a resume tailor) should read jobs through
 `jobpoller show ID --json`, not the SQLite file; the schema is internal and may change. The
 output is one JSON object with `schema_version: 1` and these keys: `id`, `status`, `company`,
-`title`, `url`, `source`, `location`, `posted_at` (ISO or null), `first_seen`, `fit` (integer or
+`title`, `url`, `source` (`greenhouse`, `lever`, `ashby`, `hn` or `manual`), `location`, `posted_at` (ISO or null), `first_seen`, `fit` (integer or
 null), `keyword_score`, `summary`, `red_flags` (list), `description` (plain text, may be empty).
 A breaking change bumps `schema_version`. An unknown id exits 1 with the error on stderr.

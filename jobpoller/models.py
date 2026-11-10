@@ -9,7 +9,7 @@ STATUSES = ("new", "promoted", "applied", "dismissed")
 
 @dataclass(frozen=True)
 class Job:
-    source: str  # greenhouse | lever | ashby | hn
+    source: str  # greenhouse | lever | ashby | hn | manual
     company: str
     job_id: str
     title: str

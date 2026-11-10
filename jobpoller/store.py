@@ -123,6 +123,11 @@ class Store:
         row = self._conn.execute(f"SELECT {_COLS} FROM seen WHERE id = ?", (job_id,)).fetchone()
         return _queued(row) if row else None
 
+    def find_by_url(self, url: str) -> int | None:
+        """Id of a queued job with this apply URL (any source), so adds never duplicate."""
+        row = self._conn.execute("SELECT id FROM seen WHERE url = ? LIMIT 1", (url,)).fetchone()
+        return None if row is None else int(row[0])
+
     def posting(self, job_id: int) -> tuple[str, str | None] | None:
         """(full posting text, posted_at ISO) for a queued job; kept apart from QueuedJob
         because the text is large and `list` never needs it."""

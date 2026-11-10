@@ -15,13 +15,14 @@ from .bench import compare, format_report, run_bench
 from .config import PROFILES, Config, ConfigError, load_config
 from .digest import render_digest
 from .doctor import create_config_from_example, run_checks
+from .manual import ManualError, build_job, decode, extract, read_file
 from .models import STATUSES
 from .notify import notify
 from .pipeline import RunReport, collect, run
 from .queuefile import QueueError, add_to_queue_file
-from .ranker import LLMUnavailable, Ranker
+from .ranker import LLMUnavailable, Ranker, RankError
 from .schedule import ScheduleError, apply_install, normalize_time, plan_install, remove, status
-from .scoring import criteria_from_json, score_job
+from .scoring import criteria_from_json, explain_job, score_job
 from .sources import BoardError, fetch_board
 from .store import QueuedJob, Store
 from .tune import format_result, tune
@@ -187,6 +188,64 @@ def _cmd_list(config: Config, status: str | None, min_fit: int | None, verbose: 
                 print(f"         {job.summary}")
             if job.red_flags:
                 print(f"         flags: {'; '.join(job.red_flags)}")
+    return 0
+
+
+def _cmd_add(
+    config: Config, args: argparse.Namespace, ranker: Ranker | None, now: datetime
+) -> int:
+    """Add a posting you saved or pasted yourself (e.g. from LinkedIn). Never fetches a page."""
+    try:
+        if args.file in (None, "-"):
+            if args.file is None and sys.stdin.isatty():
+                raise ManualError("give a .txt/.md/.html file, or pipe the posting text in")
+            extracted = extract(decode(sys.stdin.buffer.read()), args.format or "text")
+        else:
+            extracted = read_file(Path(args.file), args.format)
+        job, warnings = build_job(
+            extracted,
+            company=args.company or "",
+            title=args.title or "",
+            location=args.location or "",
+            url=args.url or "",
+        )
+    except ManualError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    for warning in warnings:
+        print(f"warn: {warning}", file=sys.stderr)
+
+    store = Store(config.db)
+    try:
+        existing = store.find_by_url(job.url)
+        if existing is not None:
+            print(f"already queued as #{existing} (nothing changed)")
+            job_id = existing
+        else:
+            ranking = None
+            if ranker is not None:
+                ranking = store.get_ranking(job, ranker.fingerprint)
+                if ranking is None:
+                    try:
+                        ranking = ranker.rank(job)
+                        store.put_ranking(job, ranker.fingerprint, ranking, now)
+                    except (LLMUnavailable, RankError) as exc:
+                        print(f"warn: not scored ({exc}); added without a fit", file=sys.stderr)
+            # You chose this job, so the keyword filters don't veto it; they only give a score.
+            keyword = explain_job(job, config.criteria, now).score or 0
+            store.add_if_new(job, keyword, now, ranking)
+            found = store.find_by_url(job.url)
+            if found is None:  # cannot happen: just inserted
+                print("error: could not save the job", file=sys.stderr)
+                return 1
+            job_id = found
+            label = f"fit {ranking.fit}" if ranking else f"kw {keyword}"
+            print(f"added #{job_id} {job.title[:60]} @ {job.company} ({label})")
+            print(f"  jobpoller show {job_id}   |   jobpoller promote {job_id}")
+    finally:
+        store.close()
+    if args.promote:
+        return _cmd_status(config, "promote", [job_id], now)
     return 0
 
 
@@ -415,6 +474,18 @@ def _parser() -> argparse.ArgumentParser:
     list_p.add_argument("--min-fit", type=int, help="LLM fit (keyword score if LLM was off)")
     list_p.add_argument("-v", "--verbose", action="store_true", help="show link and summary")
 
+    add_p = sub.add_parser(
+        "add", parents=[common], help="add a posting you saved yourself (txt, md or html)"
+    )
+    add_p.add_argument("file", nargs="?", help=".txt/.md/.html file, or - / omitted for stdin")
+    add_p.add_argument("--url", help="apply link (required unless the HTML contains it)")
+    add_p.add_argument("--company", help="required unless the HTML contains it")
+    add_p.add_argument("--title", help="required unless the HTML contains it")
+    add_p.add_argument("--location")
+    add_p.add_argument("--format", choices=["text", "html"], help="override the file extension")
+    add_p.add_argument("--no-score", action="store_true", help="skip the AI fit score")
+    add_p.add_argument("--promote", action="store_true", help="also add it to your queue file")
+
     show_p = sub.add_parser("show", parents=[common], help="print one job with its full posting")
     show_p.add_argument("id", type=int, help="id from `jobpoller list`")
     show_p.add_argument("--json", action="store_true", help="machine-readable (for other tools)")
@@ -475,7 +546,8 @@ def main(
         return _cmd_tune(config, args, now)
 
     try:
-        ranker = _build_ranker(config, transport)
+        skip_ranker = args.cmd == "add" and args.no_score
+        ranker = None if skip_ranker else _build_ranker(config, transport)
     except (OSError, ConfigError) as exc:
         print(f"config error: {exc}", file=sys.stderr)
         return 2
@@ -495,6 +567,8 @@ def main(
                 except (OSError, ConfigError) as exc:
                     print(f"config error: {exc}", file=sys.stderr)
                     return 2
+            if args.cmd == "add":
+                return _cmd_add(config, args, ranker, now)
             report = run(config, client, now, args.dry_run, ranker)
             if not args.dry_run:
                 warnings = notify(config.notify, report.new, client)
