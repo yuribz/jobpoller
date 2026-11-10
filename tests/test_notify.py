@@ -40,7 +40,7 @@ def client(handler: Any = lambda r: httpx.Response(200)) -> httpx.Client:
 
 def test_summary_counts_only_strong_ranked_matches() -> None:
     assert summarize([match(1, 79), match(2, None)], 80) is None
-    title, body = summarize([match(1, 85), match(2, 92), match(3, 60)], 80) or ("", "")
+    title, body, _ = summarize([match(1, 85), match(2, 92), match(3, 60)], 80) or ("", "", "")
     assert title == "jobpoller: 2 strong matches"
     assert "Role 2" in body and "fit 92" in body
     assert (summarize([match(1, 80)], 80) or ("",))[0] == "jobpoller: 1 strong match"
@@ -88,6 +88,7 @@ def test_ntfy_posts_summary_and_failures_are_warnings() -> None:
     assert str(seen[0].url) == "https://ntfy.example/topic"
     assert seen[0].headers["Title"] == "jobpoller: 1 strong match"
     assert b"Role 1" in seen[0].content
+    assert seen[0].headers["Click"] == match(1, 95).job.url
 
     def down(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("no route", request=request)

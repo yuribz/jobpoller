@@ -22,8 +22,8 @@ class NotifyConfig:
 Runner = Callable[..., "subprocess.CompletedProcess[bytes]"]
 
 
-def summarize(matches: Sequence[Match], threshold: int) -> tuple[str, str] | None:
-    """(title, body) for the strong matches, or None. Keyword-only jobs have no fit: skipped."""
+def summarize(matches: Sequence[Match], threshold: int) -> tuple[str, str, str] | None:
+    """(title, body, url of the best job) or None. Keyword-only jobs have no fit: skipped."""
     strong = [m for m in matches if m.ranking is not None and m.ranking.fit >= threshold]
     if not strong:
         return None
@@ -31,7 +31,7 @@ def summarize(matches: Sequence[Match], threshold: int) -> tuple[str, str] | Non
     plural = "match" if len(strong) == 1 else "matches"
     title = f"jobpoller: {len(strong)} strong {plural}"
     fit = best.ranking.fit if best.ranking else 0
-    return title, f"Top: {best.job.title[:80]} @ {best.job.company} (fit {fit})"
+    return title, f"Top: {best.job.title[:80]} @ {best.job.company} (fit {fit})", best.job.url
 
 
 def notify(
@@ -44,13 +44,13 @@ def notify(
     message = summarize(matches, cfg.threshold)
     if message is None:
         return []
-    title, body = message
+    title, body, url = message
     warnings: list[str] = []
     try:
         if cfg.desktop:
             warnings += _desktop(title, body, runner or subprocess.run)
         if cfg.ntfy:
-            warnings += _ntfy(cfg.ntfy, title, body, client)
+            warnings += _ntfy(cfg.ntfy, title, body, url, client)
     except Exception as exc:  # noqa: BLE001 - contract: a notification bug never fails a run
         warnings.append(f"notify: unexpected error: {exc!r}")
     return warnings
@@ -74,15 +74,13 @@ def _desktop(title: str, body: str, runner: Runner) -> list[str]:
     return []
 
 
-def _ntfy(url: str, title: str, body: str, client: httpx.Client) -> list[str]:
+def _ntfy(topic: str, title: str, body: str, link: str, client: httpx.Client) -> list[str]:
+    # HTTP headers are latin-1; keep the title safe and put full text in the body.
+    headers = {"Title": title.encode("ascii", "replace").decode("ascii")}
+    if link.startswith(("http://", "https://")) and link.isascii():
+        headers["Click"] = link  # tapping the push opens the posting
     try:
-        # HTTP headers are latin-1; keep the title safe and put full text in the body.
-        response = client.post(
-            url,
-            content=body.encode("utf-8"),
-            headers={"Title": title.encode("ascii", "replace").decode("ascii")},
-            timeout=10.0,
-        )
+        response = client.post(topic, content=body.encode("utf-8"), headers=headers, timeout=10.0)
         response.raise_for_status()
     except httpx.HTTPError as exc:
         return [f"notify: ntfy failed: {exc}"]
