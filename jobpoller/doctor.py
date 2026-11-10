@@ -12,7 +12,7 @@ from pathlib import Path
 
 import httpx
 
-from .config import Config, ConfigError, load_config
+from .config import PROFILES, Config, ConfigError, load_config
 from .schedule import Runner, ScheduleError, run_systemctl, status
 
 EXAMPLE_CONFIG = Path(__file__).resolve().parent.parent / "config.example.yaml"
@@ -26,14 +26,19 @@ class CheckResult:
     fix: str = ""
 
 
-def create_config_from_example(path: Path) -> None:
+def create_config_from_example(path: Path, profile: str | None = None) -> None:
     if path.exists():
         raise FileExistsError(path)
     if not EXAMPLE_CONFIG.is_file():
         raise FileNotFoundError(
             f"{EXAMPLE_CONFIG} not found (jobpoller was not installed from a source checkout)"
         )
-    path.write_text(EXAMPLE_CONFIG.read_text(encoding="utf-8"), encoding="utf-8")
+    text = EXAMPLE_CONFIG.read_text(encoding="utf-8")
+    if profile is not None:
+        if profile not in PROFILES:
+            raise ValueError(f"profile must be one of {sorted(PROFILES)}")
+        text = text.replace("  profile: heavy\n", f"  profile: {profile}\n", 1)
+    path.write_text(text, encoding="utf-8")
 
 
 def _has_model(names: set[str], model: str) -> bool:
@@ -89,8 +94,16 @@ def _llm_checks(
             )
             return results
         results.append(CheckResult("model", True, f"{llm.model} is pulled"))
-        if gpu:
+        if gpu and llm.profile == "heavy":
             results.append(_gpu_check(client, config))
+        elif gpu:
+            results.append(
+                CheckResult(
+                    "gpu",
+                    True,
+                    f"skipped: profile '{llm.profile}' is meant for CPU / integrated graphics",
+                )
+            )
     return results
 
 

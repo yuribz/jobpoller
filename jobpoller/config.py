@@ -14,8 +14,38 @@ from .sources import FETCHERS
 DEFAULT_UA = "jobpoller/0.1 (personal job search; reads public job-board JSON only)"
 
 
+# Presets for `llm.profile`. Any llm.* key you set yourself overrides the preset.
+# light/balanced target machines without a discrete GPU (CPU inference): smaller model, smaller
+# prompt window, fewer new rankings per run (the rest wait for the next run), longer timeout.
+PROFILES: dict[str, dict[str, Any]] = {
+    "light": {
+        "model": "qwen3:4b",
+        "num_ctx": 4096,
+        "max_desc_chars": 3500,
+        "max_new_rankings": 20,
+        "timeout_seconds": 300,
+    },
+    "balanced": {
+        "model": "qwen3:8b",
+        "num_ctx": 6144,
+        "max_desc_chars": 5000,
+        "max_new_rankings": 30,
+        "timeout_seconds": 300,
+    },
+    "heavy": {
+        "model": "qwen3:14b",
+        "num_ctx": 8192,
+        "max_desc_chars": 6000,
+        "max_new_rankings": 40,
+        "timeout_seconds": 180,
+    },
+}
+DEFAULT_PROFILE = "heavy"
+
+
 @dataclass
 class LLMConfig:
+    profile: str = DEFAULT_PROFILE
     enabled: bool = False
     base_url: str = "http://localhost:11434"
     model: str = "qwen3:14b"
@@ -94,17 +124,22 @@ def load_config(path: Path) -> Config:
     )
 
     llm_raw = raw.get("llm") or {}
+    profile = str(llm_raw.get("profile", DEFAULT_PROFILE))
+    if profile not in PROFILES:
+        raise ConfigError(f"llm.profile must be one of {sorted(PROFILES)}, got {profile!r}")
+    preset = PROFILES[profile]
     llm = LLMConfig(
+        profile=profile,
         enabled=bool(llm_raw.get("enabled", False)),
         base_url=str(llm_raw.get("base_url", "http://localhost:11434")).rstrip("/"),
-        model=str(llm_raw.get("model", "qwen3:14b")),
+        model=str(llm_raw.get("model", preset["model"])),
         resume_path=_resolve(base, llm_raw["resume"]) if llm_raw.get("resume") else None,
         preferences=str(llm_raw.get("preferences", "")),
         min_fit=int(llm_raw.get("min_fit", 50)),
-        max_new_rankings=int(llm_raw.get("max_new_rankings", 40)),
-        max_desc_chars=int(llm_raw.get("max_desc_chars", 6000)),
-        num_ctx=int(llm_raw.get("num_ctx", 8192)),
-        timeout_seconds=float(llm_raw.get("timeout_seconds", 180)),
+        max_new_rankings=int(llm_raw.get("max_new_rankings", preset["max_new_rankings"])),
+        max_desc_chars=int(llm_raw.get("max_desc_chars", preset["max_desc_chars"])),
+        num_ctx=int(llm_raw.get("num_ctx", preset["num_ctx"])),
+        timeout_seconds=float(llm_raw.get("timeout_seconds", preset["timeout_seconds"])),
         keep_alive=str(llm_raw.get("keep_alive", "10m")),
     )
     if llm.enabled and llm.resume_path is None:

@@ -26,6 +26,25 @@ for `qwen3:14b`, about 9 GB):
 ollama pull qwen3:14b
 ```
 
+Pick the model that fits your hardware with a **profile** (`llm.profile` in `config.yaml`):
+
+| Profile | Model | For |
+|---|---|---|
+| `light` | `qwen3:4b` | No discrete GPU (integrated graphics), 16 GB RAM or less |
+| `balanced` | `qwen3:8b` | No discrete GPU but patient, or a GPU with 8 GB |
+| `heavy` (default) | `qwen3:14b` | Discrete GPU with 12+ GB VRAM |
+
+Ollama normally runs `light` and `balanced` on the CPU, not on integrated AMD graphics, so
+expect them to be much slower than `heavy` on a real GPU. They compensate by ranking fewer new
+jobs per run (the rest wait for the next run) and allowing a longer timeout. Smaller models
+score less reliably; `jobpoller bench` (section 6) compares them on your own jobs. Any `llm:`
+key you set yourself (`model`, `num_ctx`, ...) overrides the profile.
+
+```bash
+jobpoller init --profile light     # creates config.yaml for a laptop without a GPU
+ollama pull qwen3:4b
+```
+
 Then let the setup checklist tell you what's left:
 
 ```bash

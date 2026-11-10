@@ -12,7 +12,7 @@ from pathlib import Path
 import httpx
 
 from .bench import compare, format_report, run_bench
-from .config import Config, ConfigError, load_config
+from .config import PROFILES, Config, ConfigError, load_config
 from .digest import render_digest
 from .doctor import create_config_from_example, run_checks
 from .models import STATUSES
@@ -191,7 +191,11 @@ def _cmd_list(config: Config, status: str | None, min_fit: int | None, verbose: 
 
 
 def _cmd_init(
-    config_path: Path, assume_yes: bool, gpu: bool, transport: httpx.BaseTransport | None
+    config_path: Path,
+    assume_yes: bool,
+    gpu: bool,
+    transport: httpx.BaseTransport | None,
+    profile: str | None = None,
 ) -> int:
     if not config_path.exists():
         print(f"No config at {config_path}.")
@@ -200,11 +204,14 @@ def _cmd_init(
             answer = input("Create it from config.example.yaml? [y/N] ").strip().lower()
         if answer in ("y", "yes"):
             try:
-                create_config_from_example(config_path)
+                create_config_from_example(config_path, profile)
             except OSError as exc:
                 print(f"error: {exc}", file=sys.stderr)
                 return 1
             print(f"Created {config_path}. Edit boards/criteria/llm, then run `jobpoller check`.")
+            if profile in ("light", "balanced"):
+                model = PROFILES[profile]["model"]
+                print(f"Profile '{profile}': pull its model with `ollama pull {model}`.")
         else:
             print("Skipped. Copy config.example.yaml to config.yaml (or rerun with --yes).")
     print("\njobpoller setup check")
@@ -369,6 +376,11 @@ def _parser() -> argparse.ArgumentParser:
     init_p = sub.add_parser("init", parents=[common], help="guided setup checklist")
     init_p.add_argument("--yes", action="store_true", help="create config.yaml without asking")
     init_p.add_argument("--no-gpu", action="store_true", help="skip loading the model to check GPU")
+    init_p.add_argument(
+        "--profile",
+        choices=sorted(PROFILES),
+        help="hardware preset for a newly created config (light = no discrete GPU)",
+    )
 
     sched = sub.add_parser("schedule", parents=[common], help="daily systemd user timer")
     sched.add_argument("action", choices=["install", "remove", "status"])
@@ -385,7 +397,7 @@ def main(
     args = _parser().parse_args(argv)
     now = now or datetime.now(timezone.utc)
     if args.cmd == "init":
-        return _cmd_init(args.config, args.yes, not args.no_gpu, transport)
+        return _cmd_init(args.config, args.yes, not args.no_gpu, transport, args.profile)
     if args.cmd == "schedule":
         return _cmd_schedule(args)
     try:

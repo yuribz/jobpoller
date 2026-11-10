@@ -33,17 +33,23 @@ hn: true   # newest "Ask HN: Who is hiring?" thread
 # Optional: rank keyword matches against your resume with a local Ollama model.
 # With this on, a job is queued only after it has been ranked and scored >= min_fit.
 llm:
-  enabled: false                       # flip to true once `ollama pull qwen3:14b` is done
+  enabled: false                       # flip to true once you have pulled the profile's model
+  # Hardware preset. Anything you set below overrides it.
+  #   light    qwen3:4b   no discrete GPU / integrated graphics, ~16 GB RAM or less
+  #   balanced qwen3:8b   no discrete GPU but patient, or a GPU with 8 GB
+  #   heavy    qwen3:14b  discrete GPU with 12+ GB VRAM (the default)
+  # Ollama normally runs light/balanced on the CPU. Changing model re-ranks everything.
+  profile: heavy
   base_url: http://localhost:11434
-  model: qwen3:14b                     # try qwen3:8b for speed; changing it re-ranks everything
+  # model: qwen3:14b                   # uncomment any of these four to override the profile
+  # num_ctx: 8192                      # prompt window; resume + posting must fit
+  # max_new_rankings: 40               # cap on uncached LLM calls per run; the rest wait
+  # timeout_seconds: 180               # first call includes model load time
   resume: resume.md                    # your master resume as .md/.txt (not .docx)
   preferences: >-
     Backend and systems engineering. Language priority: Python, Java, C#, Rust, C/C++.
     San Diego or remote. Entry-to-mid level; strongly dislikes PHP-only and front-end-only roles.
   min_fit: 50                          # 80+ strong, 60-79 good, 40-59 stretch
-  max_new_rankings: 40                 # cap on uncached LLM calls per run; the rest wait
-  num_ctx: 8192                        # prompt window; resume + posting fits comfortably
-  timeout_seconds: 180                 # first call includes model load time
 
 criteria:
   include_title: [software, backend, back-end, full stack, full-stack, systems, platform,
