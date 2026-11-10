@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -10,7 +11,7 @@ from .config import Config
 from .models import Job, Match
 from .output import append_discovered
 from .ranker import LLMUnavailable, Ranker, RankError
-from .scoring import score_job
+from .scoring import criteria_to_json, score_job
 from .sources import BoardError, fetch_board, fetch_hn_latest
 from .store import Store
 
@@ -85,6 +86,11 @@ def _process(
 ) -> None:
     # Keep every fetched job (matched or not) so criteria can be re-tuned offline later.
     store.cache_jobs(jobs, now)
+    if not dry_run:  # what `jobpoller tune` compares your edited config against
+        store.set_meta(
+            "last_run_criteria",
+            json.dumps({"at": now.isoformat(), "criteria": criteria_to_json(config.criteria)}),
+        )
     store.prune_cache(now, config.cache_days)
 
     candidates: list[tuple[Job, int]] = []

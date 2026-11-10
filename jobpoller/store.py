@@ -181,6 +181,21 @@ class Store:
                 restored.append(int(seen_id))
         return restored
 
+    def queued_keys(self) -> set[str]:
+        return {r[0] for r in self._conn.execute("SELECT key FROM seen")}
+
+    # --- small key/value store -----------------------------------------------------------
+
+    def set_meta(self, key: str, value: str) -> None:
+        with self._tx():
+            self._conn.execute(
+                "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", (key, value)
+            )
+
+    def get_meta(self, key: str) -> str | None:
+        row = self._conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+        return None if row is None else str(row[0])
+
     # --- recent-jobs cache (powers offline re-scoring) ------------------------------------
 
     def cache_jobs(self, jobs: Iterable[Job], now: datetime) -> None:
@@ -195,6 +210,13 @@ class Store:
         with self._tx():
             cur = self._conn.execute("DELETE FROM jobs_cache WHERE fetched_at < ?", (cutoff,))
         return cur.rowcount
+
+    def cache_range(self) -> tuple[str, str] | None:
+        """(oldest, newest) fetch time in the cache, or None when it is empty."""
+        row = self._conn.execute(
+            "SELECT MIN(fetched_at), MAX(fetched_at) FROM jobs_cache"
+        ).fetchone()
+        return None if row[0] is None else (str(row[0]), str(row[1]))
 
     def cached_jobs(self) -> list[Job]:
         rows = self._conn.execute("SELECT job FROM jobs_cache ORDER BY key").fetchall()

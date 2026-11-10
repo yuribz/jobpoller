@@ -112,7 +112,16 @@ def _m2_status_and_cache(conn: sqlite3.Connection) -> None:
     )
 
 
-MIGRATIONS: list[Callable[[sqlite3.Connection], None]] = [_m1_initial, _m2_status_and_cache]
+def _m3_meta(conn: sqlite3.Connection) -> None:
+    # Small key/value store; first user is the criteria snapshot `tune` diffs against.
+    conn.execute("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+
+
+MIGRATIONS: list[Callable[[sqlite3.Connection], None]] = [
+    _m1_initial,
+    _m2_status_and_cache,
+    _m3_meta,
+]
 
 
 def current_version(conn: sqlite3.Connection) -> int:

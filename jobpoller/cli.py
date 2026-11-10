@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 import time
@@ -20,9 +21,10 @@ from .pipeline import RunReport, collect, run
 from .queuefile import QueueError, add_to_queue_file
 from .ranker import LLMUnavailable, Ranker
 from .schedule import ScheduleError, apply_install, normalize_time, plan_install, remove, status
-from .scoring import score_job
+from .scoring import criteria_from_json, score_job
 from .sources import BoardError, fetch_board
 from .store import QueuedJob, Store
+from .tune import format_result, tune
 
 _STATUS_COMMANDS = {"promote": "promoted", "dismiss": "dismissed", "applied": "applied"}
 
@@ -255,6 +257,46 @@ def _cmd_schedule(args: argparse.Namespace) -> int:
         return 1
 
 
+def _cmd_tune(config: Config, args: argparse.Namespace, now: datetime) -> int:
+    store = Store(config.db)
+    try:
+        jobs = store.cached_jobs()
+        inbox = store.queued_keys()
+        span = store.cache_range()
+        saved = store.get_meta("last_run_criteria")
+    finally:
+        store.close()
+    if not jobs or span is None:
+        print("The cache is empty. Run `jobpoller run` first so there is something to re-score.")
+        return 1
+
+    before = None
+    label: str | None = None
+    if args.against is not None:
+        try:
+            before = load_config(args.against).criteria
+        except (OSError, ConfigError) as exc:
+            print(f"config error: {exc}", file=sys.stderr)
+            return 2
+        label = str(args.against)
+    elif saved:
+        try:
+            data = json.loads(saved)
+            before = criteria_from_json(data["criteria"])
+            when = str(data["at"])[:16].replace("T", " ")
+            label = f"criteria from your last run ({when} UTC)"
+        except (ValueError, KeyError, TypeError):
+            before = None  # unreadable snapshot: behave as if there is none
+
+    print(
+        f"Re-scored {len(jobs)} cached jobs (fetched {span[0][:10]} to {span[1][:10]}) "
+        "with your current config."
+    )
+    result = tune(jobs, config.criteria, before, now)
+    print(format_result(result, inbox, args.limit, label))
+    return 0
+
+
 def _since(value: str) -> timedelta:
     match = re.fullmatch(r"(\d+)([hdw])", value)
     if match is None:
@@ -318,6 +360,12 @@ def _parser() -> argparse.ArgumentParser:
     dig.add_argument("--since", type=_since, help="only jobs first seen within e.g. 7d")
     dig.add_argument("--min-fit", type=int)
     dig.add_argument("--out", type=Path, help="output path (default: config `digest`)")
+    tune_p = sub.add_parser(
+        "tune", parents=[common], help="re-score cached jobs with your edited criteria"
+    )
+    tune_p.add_argument("--against", type=Path, help="compare with this config instead of last run")
+    tune_p.add_argument("--limit", type=int, default=15, help="rows per section (default 15)")
+
     init_p = sub.add_parser("init", parents=[common], help="guided setup checklist")
     init_p.add_argument("--yes", action="store_true", help="create config.yaml without asking")
     init_p.add_argument("--no-gpu", action="store_true", help="skip loading the model to check GPU")
@@ -352,6 +400,8 @@ def main(
         return _cmd_list(config, args.status, args.min_fit, args.verbose)
     if args.cmd == "digest":
         return _cmd_digest(config, args, now)
+    if args.cmd == "tune":
+        return _cmd_tune(config, args, now)
 
     try:
         ranker = _build_ranker(config, transport)

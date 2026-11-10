@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime, timedelta
 from functools import lru_cache
 
@@ -19,6 +20,17 @@ class Criteria:
     keywords: dict[str, int] = field(default_factory=dict)  # weight per distinct hit (+/-)
     min_score: int = 10
     max_age_days: int | None = 45
+
+
+def criteria_to_json(criteria: Criteria) -> str:
+    return json.dumps(asdict(criteria), sort_keys=True)
+
+
+def criteria_from_json(raw: str) -> Criteria:
+    """Tolerant of fields added or removed since it was saved."""
+    data = json.loads(raw)
+    known = {f.name for f in fields(Criteria)}
+    return Criteria(**{k: v for k, v in data.items() if k in known})
 
 
 @lru_cache(maxsize=512)
