@@ -7,6 +7,7 @@ from typing import Any
 import yaml
 
 from .notify import NotifyConfig
+from .schedule import ScheduleError, normalize_time
 from .scoring import Criteria
 from .sources import FETCHERS
 
@@ -41,6 +42,7 @@ class Config:
     queue_path: Path | None = None  # your hand-edited application queue (markdown table)
     digest_path: Path = Path("digest.html")
     notify: NotifyConfig = field(default_factory=NotifyConfig)
+    schedule_time: str = "08:00"  # daily run time for `jobpoller schedule install`
     user_agent: str = DEFAULT_UA
 
 
@@ -117,6 +119,11 @@ def load_config(path: Path) -> Config:
         ntfy=ntfy,
     )
 
+    try:
+        schedule_time = normalize_time(raw.get("schedule_time", "08:00"))
+    except ScheduleError as exc:
+        raise ConfigError(f"schedule_time: {exc}") from exc
+
     return Config(
         boards=boards,
         hn=bool(raw.get("hn", True)),
@@ -129,5 +136,6 @@ def load_config(path: Path) -> Config:
         queue_path=base / str(raw["queue_path"]) if raw.get("queue_path") else None,
         digest_path=base / str(raw.get("digest", "digest.html")),
         notify=notify,
+        schedule_time=schedule_time,
         user_agent=str(raw.get("user_agent", DEFAULT_UA)),
     )
