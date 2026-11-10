@@ -6,6 +6,7 @@ from typing import Any
 
 import yaml
 
+from .notify import NotifyConfig
 from .scoring import Criteria
 from .sources import FETCHERS
 
@@ -37,6 +38,9 @@ class Config:
     output: Path = Path("discovered.md")
     delay_seconds: float = 0.5
     cache_days: int = 14  # how long fetched jobs are kept for offline re-scoring
+    queue_path: Path | None = None  # your hand-edited application queue (markdown table)
+    digest_path: Path = Path("digest.html")
+    notify: NotifyConfig = field(default_factory=NotifyConfig)
     user_agent: str = DEFAULT_UA
 
 
@@ -103,6 +107,16 @@ def load_config(path: Path) -> Config:
     if cache_days < 1:
         raise ConfigError("cache_days must be at least 1")
 
+    n = raw.get("notify") or {}
+    ntfy = str(n.get("ntfy") or "")
+    if ntfy and not ntfy.startswith(("http://", "https://")):
+        raise ConfigError("notify.ntfy must be a full http(s) topic URL")
+    notify = NotifyConfig(
+        threshold=int(n.get("threshold", 80)),
+        desktop=bool(n.get("desktop", True)),
+        ntfy=ntfy,
+    )
+
     return Config(
         boards=boards,
         hn=bool(raw.get("hn", True)),
@@ -112,5 +126,8 @@ def load_config(path: Path) -> Config:
         output=base / str(raw.get("output", "discovered.md")),
         delay_seconds=float(raw.get("request_delay_seconds", 0.5)),
         cache_days=cache_days,
+        queue_path=base / str(raw["queue_path"]) if raw.get("queue_path") else None,
+        digest_path=base / str(raw.get("digest", "digest.html")),
+        notify=notify,
         user_agent=str(raw.get("user_agent", DEFAULT_UA)),
     )

@@ -2,6 +2,21 @@
 db: jobpoller.sqlite3
 output: discovered.md          # point at your project's queue/ folder if you like
 request_delay_seconds: 0.5     # pause between boards; be polite
+cache_days: 14                 # keep every fetched job this long so criteria can be re-tuned offline
+
+# Your hand-edited application queue (markdown). `jobpoller promote <id>` appends rows to its
+# `| # | Role | Company | Apply link | Resume | Cover letter | Status |` table (creating a
+# "Discovered by jobpoller" section if there is none) and never touches rows you wrote.
+queue_path: queue/job_queue.md
+digest: digest.html            # where `jobpoller digest` writes the static HTML page
+
+# After a real `run`: one notification if any NEW job has an LLM fit >= threshold.
+# Failures here only print a warning. Needs llm.enabled (keyword-only jobs have no fit).
+notify:
+  threshold: 80
+  desktop: true                # notify-send
+  ntfy: ""                     # optional topic URL, e.g. https://ntfy.sh/<your-private-topic>.
+                               # Note: that sends the top job's title to that server.
 
 # Company board slugs = the last path segment of the careers URL:
 #   boards.greenhouse.io/<slug>   jobs.lever.co/<slug>   jobs.ashbyhq.com/<slug>
