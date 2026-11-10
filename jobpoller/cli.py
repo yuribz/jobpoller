@@ -13,11 +13,13 @@ import httpx
 from .bench import compare, format_report, run_bench
 from .config import Config, ConfigError, load_config
 from .digest import render_digest
+from .doctor import create_config_from_example, run_checks
 from .models import STATUSES
 from .notify import notify
 from .pipeline import RunReport, collect, run
 from .queuefile import QueueError, add_to_queue_file
 from .ranker import LLMUnavailable, Ranker
+from .schedule import ScheduleError, apply_install, normalize_time, plan_install, remove, status
 from .scoring import score_job
 from .sources import BoardError, fetch_board
 from .store import QueuedJob, Store
@@ -186,6 +188,73 @@ def _cmd_list(config: Config, status: str | None, min_fit: int | None, verbose: 
     return 0
 
 
+def _cmd_init(
+    config_path: Path, assume_yes: bool, gpu: bool, transport: httpx.BaseTransport | None
+) -> int:
+    if not config_path.exists():
+        print(f"No config at {config_path}.")
+        answer = "y" if assume_yes else ""
+        if not assume_yes and sys.stdin.isatty():
+            answer = input("Create it from config.example.yaml? [y/N] ").strip().lower()
+        if answer in ("y", "yes"):
+            try:
+                create_config_from_example(config_path)
+            except OSError as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                return 1
+            print(f"Created {config_path}. Edit boards/criteria/llm, then run `jobpoller check`.")
+        else:
+            print("Skipped. Copy config.example.yaml to config.yaml (or rerun with --yes).")
+    print("\njobpoller setup check")
+    failed = 0
+    for result in run_checks(config_path, transport, gpu=gpu):
+        print(f"{'ok' if result.ok else 'FAIL':<5} {result.name}: {result.detail}")
+        if not result.ok:
+            failed += 1
+            if result.fix:
+                print(f"      fix: {result.fix}")
+    print("\nAll set." if not failed else f"\n{failed} item(s) need attention.")
+    return 1 if failed else 0
+
+
+def _cmd_schedule(args: argparse.Namespace) -> int:
+    try:
+        if args.action == "status":
+            state = status()
+            if not state.installed:
+                print("not installed (run `jobpoller schedule install`)")
+                return 1
+            print(f"installed: yes  enabled: {state.enabled}  active: {state.active}")
+            print(f"next run: {state.next_run}")
+            print(f"last run: {state.last_result}")
+            print("logs: journalctl --user -u jobpoller.service -n 50")
+            if state.linger is False:
+                print(
+                    "note: lingering is off, so a run missed while logged out happens at "
+                    "next login (enable with `loginctl enable-linger $USER`)"
+                )
+            return 0
+        if args.action == "remove":
+            print("removed jobpoller timer" if remove() else "nothing to remove")
+            return 0
+        config = load_config(args.config)
+        time = normalize_time(args.time) if args.time else config.schedule_time
+        plan = plan_install(Path(sys.executable), args.config.resolve(), time)
+        print(f"Daily run at {time} using {sys.executable}\nThis will:")
+        for line in plan.describe():
+            print(f"  {line}")
+        if args.dry_run:
+            print(f"\n--- {plan.service_path.name}\n{plan.service_text}")
+            print(f"--- {plan.timer_path.name}\n{plan.timer_text}(dry run: nothing changed)")
+            return 0
+        apply_install(plan)
+        print("installed. Check with `jobpoller schedule status`.")
+        return 0
+    except (ScheduleError, ConfigError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+
 def _since(value: str) -> timedelta:
     match = re.fullmatch(r"(\d+)([hdw])", value)
     if match is None:
@@ -249,6 +318,14 @@ def _parser() -> argparse.ArgumentParser:
     dig.add_argument("--since", type=_since, help="only jobs first seen within e.g. 7d")
     dig.add_argument("--min-fit", type=int)
     dig.add_argument("--out", type=Path, help="output path (default: config `digest`)")
+    init_p = sub.add_parser("init", parents=[common], help="guided setup checklist")
+    init_p.add_argument("--yes", action="store_true", help="create config.yaml without asking")
+    init_p.add_argument("--no-gpu", action="store_true", help="skip loading the model to check GPU")
+
+    sched = sub.add_parser("schedule", parents=[common], help="daily systemd user timer")
+    sched.add_argument("action", choices=["install", "remove", "status"])
+    sched.add_argument("--time", help="HH:MM (default: schedule_time in config, else 08:00)")
+    sched.add_argument("--dry-run", action="store_true", help="show what would change")
     return parser
 
 
@@ -259,6 +336,10 @@ def main(
 ) -> int:
     args = _parser().parse_args(argv)
     now = now or datetime.now(timezone.utc)
+    if args.cmd == "init":
+        return _cmd_init(args.config, args.yes, not args.no_gpu, transport)
+    if args.cmd == "schedule":
+        return _cmd_schedule(args)
     try:
         config = load_config(args.config)
     except (OSError, ConfigError) as exc:
