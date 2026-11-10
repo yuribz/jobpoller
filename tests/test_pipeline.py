@@ -106,3 +106,19 @@ def test_cli_check_and_run(cfg_path: Path, capsys: pytest.CaptureFixture[str]) -
     assert main(["run", "--config", str(cfg_path)], transport=transport) == 0
     assert "added" in capsys.readouterr().out
     assert main(["run", "--config", "/nonexistent/config.yaml"]) == 2
+
+
+def test_paths_expand_home_and_stay_relative_otherwise(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    path = tmp_path / "c.yaml"
+    path.write_text(
+        "queue_path: ~/jobs/queue.md\ndigest: out/d.html\ndb: /abs/x.sqlite3\n"
+        "llm:\n  resume: ~/resume.md\n"
+    )
+    cfg = load_config(path)
+    assert cfg.queue_path == tmp_path / "home" / "jobs" / "queue.md"
+    assert cfg.llm.resume_path == tmp_path / "home" / "resume.md"
+    assert cfg.digest_path == tmp_path / "out" / "d.html"  # relative: config folder
+    assert cfg.db == Path("/abs/x.sqlite3")  # absolute stays absolute

@@ -58,6 +58,11 @@ def _str_list(raw: Any, name: str) -> list[str]:
     return raw
 
 
+def _resolve(base: Path, value: object) -> Path:
+    """Relative paths resolve against the config's folder; `~` expands to your home."""
+    return base / Path(str(value)).expanduser()
+
+
 def load_config(path: Path) -> Config:
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     if not isinstance(raw, dict):
@@ -93,7 +98,7 @@ def load_config(path: Path) -> Config:
         enabled=bool(llm_raw.get("enabled", False)),
         base_url=str(llm_raw.get("base_url", "http://localhost:11434")).rstrip("/"),
         model=str(llm_raw.get("model", "qwen3:14b")),
-        resume_path=base / str(llm_raw["resume"]) if llm_raw.get("resume") else None,
+        resume_path=_resolve(base, llm_raw["resume"]) if llm_raw.get("resume") else None,
         preferences=str(llm_raw.get("preferences", "")),
         min_fit=int(llm_raw.get("min_fit", 50)),
         max_new_rankings=int(llm_raw.get("max_new_rankings", 40)),
@@ -129,12 +134,12 @@ def load_config(path: Path) -> Config:
         hn=bool(raw.get("hn", True)),
         criteria=criteria,
         llm=llm,
-        db=base / str(raw.get("db", "jobpoller.sqlite3")),
-        output=base / str(raw.get("output", "discovered.md")),
+        db=_resolve(base, raw.get("db", "jobpoller.sqlite3")),
+        output=_resolve(base, raw.get("output", "discovered.md")),
         delay_seconds=float(raw.get("request_delay_seconds", 0.5)),
         cache_days=cache_days,
-        queue_path=base / str(raw["queue_path"]) if raw.get("queue_path") else None,
-        digest_path=base / str(raw.get("digest", "digest.html")),
+        queue_path=_resolve(base, raw["queue_path"]) if raw.get("queue_path") else None,
+        digest_path=_resolve(base, raw.get("digest", "digest.html")),
         notify=notify,
         schedule_time=schedule_time,
         user_agent=str(raw.get("user_agent", DEFAULT_UA)),
