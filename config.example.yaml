@@ -1,0 +1,67 @@
+# Copy to config.yaml. Relative paths resolve against this file's folder.
+db: jobpoller.sqlite3
+output: discovered.md          # point at your project's queue/ folder if you like
+request_delay_seconds: 0.5     # pause between boards; be polite
+
+# Company board slugs = the last path segment of the careers URL:
+#   boards.greenhouse.io/<slug>   jobs.lever.co/<slug>   jobs.ashbyhq.com/<slug>
+# Slugs below are EXAMPLES. Run `python -m jobpoller check` to see which ones respond,
+# then replace/extend with companies you actually want (San Diego / remote backend shops).
+boards:
+  greenhouse: [anthropic, cloudflare, databricks]
+  lever: [palantir]
+  ashby: [openai, ramp]
+
+hn: true   # newest "Ask HN: Who is hiring?" thread
+
+# Optional: rank keyword matches against your resume with a local Ollama model.
+# With this on, a job is queued only after it has been ranked and scored >= min_fit.
+llm:
+  enabled: false                       # flip to true once `ollama pull qwen3:14b` is done
+  base_url: http://localhost:11434
+  model: qwen3:14b                     # try qwen3:8b for speed; changing it re-ranks everything
+  resume: resume.md                    # your master resume as .md/.txt (not .docx)
+  preferences: >-
+    Backend and systems engineering. Language priority: Python, Java, C#, Rust, C/C++.
+    San Diego or remote. Entry-to-mid level; strongly dislikes PHP-only and front-end-only roles.
+  min_fit: 50                          # 80+ strong, 60-79 good, 40-59 stretch
+  max_new_rankings: 40                 # cap on uncached LLM calls per run; the rest wait
+  num_ctx: 8192                        # prompt window; resume + posting fits comfortably
+  timeout_seconds: 180                 # first call includes model load time
+
+criteria:
+  include_title: [software, backend, back-end, full stack, full-stack, systems, platform,
+                  infrastructure, swe, developer]
+  exclude_title: [staff, principal, director, vp, manager, intern, internship, sales, mechanical,
+                  hardware, recruiter, designer, support, marketing]
+  locations: [san diego, california, remote]   # substrings, case-insensitive
+  accept_remote: true
+  exclude_locations: [emea, europe, india, united kingdom, london, germany, canada, brazil]
+  # Hard-reject phrases in the posting text. Uncomment what applies to you:
+  exclude_text: []
+  #  - ts/sci
+  #  - active security clearance
+  #  - us citizenship required
+  max_age_days: 45
+  min_score: 12
+  # Weight per keyword, counted once in the description and once more if it is in the title.
+  keywords:
+    python: 8
+    java: 8
+    "c#": 5
+    rust: 6
+    "c++": 3
+    fastapi: 4
+    postgresql: 4
+    postgres: 4
+    clickhouse: 3
+    sql: 2
+    docker: 2
+    backend: 5
+    back-end: 5
+    distributed systems: 4
+    operating systems: 3
+    database: 3
+    linux: 2
+    php: -4
+    salesforce: -5

@@ -1,0 +1,18 @@
+# Personal data / secrets (CLAUDE.md hard rule): only config.example.yaml is committed
+config.yaml
+config.yaml.bak
+resume.md
+*.sqlite3
+*.sqlite3-*
+discovered.md
+digest.html
+
+# Python / tooling
+.venv/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
