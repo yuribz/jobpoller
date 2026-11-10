@@ -36,6 +36,7 @@ class Config:
     db: Path = Path("jobpoller.sqlite3")
     output: Path = Path("discovered.md")
     delay_seconds: float = 0.5
+    cache_days: int = 14  # how long fetched jobs are kept for offline re-scoring
     user_agent: str = DEFAULT_UA
 
 
@@ -98,6 +99,10 @@ def load_config(path: Path) -> Config:
     if llm.enabled and llm.resume_path is None:
         raise ConfigError("llm.enabled requires llm.resume (path to your resume as .md/.txt)")
 
+    cache_days = int(raw.get("cache_days", 14))
+    if cache_days < 1:
+        raise ConfigError("cache_days must be at least 1")
+
     return Config(
         boards=boards,
         hn=bool(raw.get("hn", True)),
@@ -106,5 +111,6 @@ def load_config(path: Path) -> Config:
         db=base / str(raw.get("db", "jobpoller.sqlite3")),
         output=base / str(raw.get("output", "discovered.md")),
         delay_seconds=float(raw.get("request_delay_seconds", 0.5)),
+        cache_days=cache_days,
         user_agent=str(raw.get("user_agent", DEFAULT_UA)),
     )

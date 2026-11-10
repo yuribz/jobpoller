@@ -14,6 +14,7 @@ from .pipeline import RunReport, collect, run
 from .ranker import LLMUnavailable, Ranker
 from .scoring import score_job
 from .sources import BoardError, fetch_board
+from .store import Store
 
 
 def _client(user_agent: str, transport: httpx.BaseTransport | None = None) -> httpx.Client:
@@ -69,10 +70,15 @@ def _bench(
         raise ConfigError("bench needs llm.resume (path to your resume as .md/.txt)")
     resume = resume_path.read_text(encoding="utf-8")
     now = datetime.now(timezone.utc)
+    store = Store(config.db)
+    try:
+        pool = store.cached_jobs()
+    finally:
+        store.close()
+    if not pool:  # nothing cached yet (never ran): fall back to a live fetch
+        pool = collect(config, client, RunReport())
     scored = [
-        (j, s)
-        for j in collect(config, client, RunReport())
-        if (s := score_job(j, config.criteria, now)) is not None
+        (j, s) for j in pool if (s := score_job(j, config.criteria, now)) is not None
     ]
     scored.sort(key=lambda p: (-p[1], p[0].key))  # deterministic: both models see the same jobs
     jobs = [j for j, _ in scored[:count]]

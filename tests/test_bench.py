@@ -100,3 +100,27 @@ def test_cli_bench_reports_missing_model(
     )
     assert code == 1 and "ollama pull llama3:70b" in capsys.readouterr().err
     assert main(["bench", "--config", str(path), "--models", "only-one"]) == 2
+
+
+def test_bench_uses_cached_jobs_without_fetching(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from jobpoller.config import load_config
+    from jobpoller.pipeline import run
+    from tests.test_store import NOW
+
+    path = write_config(tmp_path, llm=True)
+    ats = httpx.Client(transport=httpx.MockTransport(ats_handler))
+    run(load_config(path), ats, NOW, dry_run=True)  # populates jobs_cache only
+
+    inner = _two_model_handler([])
+
+    def no_ats(request: httpx.Request) -> httpx.Response:
+        assert request.url.host == "localhost", f"unexpected fetch: {request.url}"
+        return inner.handle_request(request)
+
+    code = main(
+        ["bench", "--config", str(path), "--models", "qwen3:14b,qwen3:8b", "-n", "2"],
+        transport=httpx.MockTransport(no_ats),
+    )
+    assert code == 0 and "ranking 2 jobs" in capsys.readouterr().out

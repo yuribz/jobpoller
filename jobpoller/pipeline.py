@@ -63,6 +63,30 @@ def run(
     jobs = collect(config, client, report)
     report.fetched = len(jobs)
 
+    store = Store(config.db)
+    try:
+        _process(config, store, jobs, now, dry_run, ranker, report)
+    finally:
+        store.close()
+
+    if not dry_run:
+        append_discovered(config.output, report.new, now.date())
+    return report
+
+
+def _process(
+    config: Config,
+    store: Store,
+    jobs: list[Job],
+    now: datetime,
+    dry_run: bool,
+    ranker: Ranker | None,
+    report: RunReport,
+) -> None:
+    # Keep every fetched job (matched or not) so criteria can be re-tuned offline later.
+    store.cache_jobs(jobs, now)
+    store.prune_cache(now, config.cache_days)
+
     candidates: list[tuple[Job, int]] = []
     for job in jobs:
         score = score_job(job, config.criteria, now)
@@ -74,44 +98,37 @@ def run(
     llm = config.llm
     budget = llm.max_new_rankings
     llm_up = True
-    store = Store(config.db)
-    try:
-        for job, score in candidates:
-            if store.has(job):
+    for job, score in candidates:
+        if store.has(job):
+            continue
+        ranking = None
+        if ranker is not None:
+            if not llm_up:
+                report.deferred += 1
                 continue
-            ranking = None
-            if ranker is not None:
-                if not llm_up:
+            ranking = store.get_ranking(job, ranker.fingerprint)
+            if ranking is None:
+                if budget <= 0:
                     report.deferred += 1
                     continue
-                ranking = store.get_ranking(job, ranker.fingerprint)
-                if ranking is None:
-                    if budget <= 0:
-                        report.deferred += 1
-                        continue
-                    budget -= 1
-                    try:
-                        ranking = ranker.rank(job)
-                    except LLMUnavailable as exc:
-                        report.errors.append(f"llm: {exc}; deferring remaining jobs")
-                        llm_up = False
-                        report.deferred += 1
-                        continue
-                    except RankError as exc:
-                        report.errors.append(f"rank {job.key}: {exc}")
-                        report.deferred += 1
-                        continue
-                    store.put_ranking(job, ranker.fingerprint, ranking, now)
-                if ranking.fit < llm.min_fit:
-                    report.llm_rejected += 1
+                budget -= 1
+                try:
+                    ranking = ranker.rank(job)
+                except LLMUnavailable as exc:
+                    report.errors.append(f"llm: {exc}; deferring remaining jobs")
+                    llm_up = False
+                    report.deferred += 1
                     continue
-            if dry_run:
-                report.new.append(Match(job, score, ranking))
-            elif store.add_if_new(job, score, now):
-                report.new.append(Match(job, score, ranking))
-    finally:
-        store.close()
+                except RankError as exc:
+                    report.errors.append(f"rank {job.key}: {exc}")
+                    report.deferred += 1
+                    continue
+                store.put_ranking(job, ranker.fingerprint, ranking, now)
+            if ranking.fit < llm.min_fit:
+                report.llm_rejected += 1
+                continue
+        if dry_run:
+            report.new.append(Match(job, score, ranking))
+        elif store.add_if_new(job, score, now, ranking):
+            report.new.append(Match(job, score, ranking))
 
-    if not dry_run:
-        append_discovered(config.output, report.new, now.date())
-    return report
