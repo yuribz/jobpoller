@@ -10,6 +10,8 @@ except requests to the public job-board endpoints.
 
 ## Use
 
+**New here? Read [GUIDE.md](GUIDE.md)**: setup, the daily loop, scheduling, and troubleshooting.
+
 ```bash
 pip install -e ".[dev]"
 cp config.example.yaml config.yaml     # edit boards, criteria, llm
