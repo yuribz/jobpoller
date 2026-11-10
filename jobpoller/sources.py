@@ -83,6 +83,39 @@ def fetch_greenhouse(client: httpx.Client, slug: str) -> list[Job]:
     return jobs
 
 
+def _join_locations(primary: Any, others: Any) -> str:
+    """Primary location first, then any additional ones, de-duplicated, '; '-separated.
+
+    Postings are often listed under one HQ but open in several places; filtering on the
+    primary alone would hide, say, a San Diego opening listed under New York.
+    """
+    seen: list[str] = []
+    candidates = [primary, *(others if isinstance(others, list) else [])]
+    for cand in candidates:
+        if isinstance(cand, dict):  # Ashby secondaryLocations entries
+            cand = cand.get("location")
+        if isinstance(cand, str) and cand.strip() and cand.strip() not in seen:
+            seen.append(cand.strip())
+    return "; ".join(seen)
+
+
+def _lever_description(item: dict[str, Any]) -> str:
+    """Intro + requirement lists + closing text.
+
+    Lever puts responsibilities/qualifications in `lists`, outside `descriptionPlain`; in live
+    data many postings name their stack only there, so skipping them under-scores real matches.
+    """
+    intro = item.get("descriptionPlain") or strip_html(item.get("description") or "")
+    parts = [intro]
+    for section in item.get("lists") or []:
+        heading = strip_html(section.get("text") or "")
+        body = strip_html(section.get("content") or "")
+        if heading or body:
+            parts.append(f"{heading}\n{body}".strip())
+    parts.append(item.get("additionalPlain") or strip_html(item.get("additional") or ""))
+    return "\n\n".join(p for p in parts if p)
+
+
 def fetch_lever(client: httpx.Client, slug: str) -> list[Job]:
     data = _get_json(client, f"https://api.lever.co/v0/postings/{slug}", {"mode": "json"})
     if not isinstance(data, list):
@@ -92,14 +125,14 @@ def fetch_lever(client: httpx.Client, slug: str) -> list[Job]:
         if not item.get("id"):
             continue
         categories = item.get("categories") or {}
-        location = categories.get("location") or ""
+        location = _join_locations(categories.get("location"), categories.get("allLocations"))
         created = item.get("createdAt")
         posted = (
             datetime.fromtimestamp(created / 1000, tz=timezone.utc)
             if isinstance(created, (int, float))
             else None
         )
-        description = item.get("descriptionPlain") or strip_html(item.get("description") or "")
+        description = _lever_description(item)
         jobs.append(
             Job(
                 source="lever",
@@ -129,8 +162,13 @@ def fetch_ashby(client: httpx.Client, slug: str) -> list[Job]:
         job_id = item.get("id") or item.get("jobUrl")
         if not job_id:
             continue
-        location = item.get("location") or ""
+        location = _join_locations(item.get("location"), item.get("secondaryLocations"))
         description = item.get("descriptionPlain") or strip_html(item.get("descriptionHtml") or "")
+        # Live data sets isRemote=true on Hybrid roles; workplaceType is the reliable signal.
+        workplace = item.get("workplaceType")
+        remote = (
+            workplace == "Remote" if isinstance(workplace, str) else bool(item.get("isRemote"))
+        ) or "remote" in location.lower()
         jobs.append(
             Job(
                 source="ashby",
@@ -140,7 +178,7 @@ def fetch_ashby(client: httpx.Client, slug: str) -> list[Job]:
                 location=location,
                 url=item.get("jobUrl") or item.get("applyUrl") or "",
                 description=description,
-                remote=bool(item.get("isRemote")) or "remote" in location.lower(),
+                remote=remote,
                 posted_at=_parse_iso(item.get("publishedAt")),
             )
         )

@@ -1,0 +1,127 @@
+[
+ {
+  "additional": "",
+  "additionalPlain": "",
+  "categories": {
+   "department": "Software",
+   "location": "Foster City, CA",
+   "team": "Autonomy Software",
+   "allLocations": [
+    "Foster City, CA"
+   ]
+  },
+  "createdAt": 1787932219884,
+  "descriptionPlain": "The Mapping Web team builds the geospatial visualization tools that enable Zoox engineers to understand and reason about the robot’s world. The team develops internal map visualization libraries that power rendering across a wide range of applications.\n\nWe are seeking a Senior Software Engineer to own and advance these core libraries. This person will extend rendering capabilities, strengthen the underlying architecture, and create scalable foundations that other engineering teams can build upon. Deep, hands-on experience with map and geospatial visualization is required for this role.\n",
+  "description": "<div>\n<p>The Mapping Web team builds the geospatial visualization tools that enable Zoox engineers to understand and reason about the robot’s world. The team develops internal map visualization libraries that power rendering across a wide range of applications.<br><br></p>\n<p>We are seeking a Senior Software Engineer to own and advance these core libraries. This person will extend rendering capabilities, strengthen the underlying architecture, and create scalable foundations that other engineering teams can build upon. Deep, hands-on experience with map and geospatial visualization is required for this role.</p>\n</div>",
+  "id": "ef2fe77d-9b7b-4fdf-a98d-93e46f7ed272",
+  "lists": [
+   {
+    "text": "In this role, you will:",
+    "content": "<div>\n\n<li>\n<p>Own and extend our deck.gl-based map visualization library.</p>\n</li>\n<li>\n<p>Design and deliver new 2D and 3D rendering capabilities for geospatial data, road networks, lane geometry, and our proprietary road network structures.</p>\n</li>\n<li>\n<p>Partner with teams such as Cartography and Simulation to translate their visualization needs into scalable features.</p>\n</li>\n<li>\n<p>Improve rendering performance for large, complex map datasets.</p>\n</li>\n<li>\n<p>Elevate code quality, documentation, and test coverage while mentoring engineers on geospatial rendering and React/deck.gl patterns.</p>\n</li>\n\n</div>"
+   },
+   {
+    "text": "Qualifications",
+    "content": "<div>\n\n<li>\n<p>Bachelor’s degree or higher in Computer Science or a related field, or equivalent practical experience.</p>\n</li>\n<li>\n<p>5+ years of professional software engineering experience, with strong expertise in React, modern TypeScript and Python.</p>\n</li>\n<li>\n<p>Hands-on experience with deck.gl, Mapbox GL, MapLibre, or a comparable WebGL-based mapping or 3D visualization library.</p>\n</li>\n<li>\n<p>Strong knowledge of geospatial data concepts, including coordinate systems, tiling, and vector and raster rendering.</p>\n</li>\n<li>\n<p>Experience designing and maintaining libraries or platforms used by other engineering teams, with a strong focus on correctness, modularity, testability, and code quality.</p>\n</li>\n\n</div>"
+   },
+   {
+    "text": "Bonus Qualifications ",
+    "content": "<div>\n\n<li>\n<p>Experience working with large-scale geospatial datasets in autonomous vehicle, mapping, or GIS environments.</p>\n</li>\n<li>\n<p>Familiarity with WebGL and GPU rendering performance optimization.</p>\n</li>\n<li>\n<p>Demonstrated success providing technical mentorship and collaborating across teams on shared infrastructure.</p>\n</li>\n\n</div>"
+   }
+  ],
+  "salaryRange": {
+   "min": 201000,
+   "max": 275000,
+   "currency": "USD",
+   "interval": "per-year-salary"
+  },
+  "text": "Senior Software Engineer -  Mapping Web",
+  "country": "US",
+  "workplaceType": "hybrid",
+  "hostedUrl": "https://jobs.lever.co/zoox/ef2fe77d-9b7b-4fdf-a98d-93e46f7ed272",
+  "applyUrl": "https://jobs.lever.co/zoox/ef2fe77d-9b7b-4fdf-a98d-93e46f7ed272/apply"
+ },
+ {
+  "additional": "",
+  "additionalPlain": "",
+  "categories": {
+   "commitment": "Full-time",
+   "department": "Advanced Hardware Engineering",
+   "location": "Foster City, CA",
+   "team": "Sensor Engineering",
+   "allLocations": [
+    "Foster City, CA"
+   ]
+  },
+  "createdAt": 1792700121833,
+  "descriptionPlain": "",
+  "description": "<div>Zoox is developing the first ground-up, fully autonomous vehicle fleet and the supporting ecosystem required to bring this technology to market. Sitting at the intersection of artificial intelligence, robotics, and design, Zoox aims to provide the next generation of mobility-as-a-service in urban environments. We’re looking for top talent that shares our passion and wants to be part of a fast-moving and highly execution-oriented team. Zoox is looking for a Radar Engineer with a background in automotive radar systems to join our Advanced Hardware Engineering team.</div>",
+  "id": "09924dfa-16b4-415a-828e-4ae7d903ecc2",
+  "lists": [
+   {
+    "text": "In this role, you will: ",
+    "content": "<div>\n\n<li>Focus on translating stakeholder needs into measurable requirements and test plans for radar. This includes:</li>\n<li>Defining and documenting the radar requirements</li>\n<li>Defining and conducting radar testing to drive radar selection and future roadmaps</li>\n\n</div>"
+   },
+   {
+    "text": "Qualifications ",
+    "content": "<div>\n\n<li>M.S. or PhD in EE, Physics, or Signal Processing</li>\n<li>5+ years of experience in radar development and testing</li>\n<li>MATLAB, Python, Git/GitHub, AI Tools</li>\n<li>Understanding of the working principles of a typical automotive Radar system (such as FMCW)</li>\n<li>Experience with hands-on radar troubleshooting for problems that intersect hardware and software</li>\n<li>Experience integrating radar systems and ideas into ML-based Autonomy Software</li>\n\n</div>"
+   },
+   {
+    "text": "Bonus Qualifications ",
+    "content": "<div>\n\n<li>Experience in numerical, electromagnetic or system simulation of Radar performance and integration</li>\n<li>Experience with system engineering workflows and requirement development</li>\n\n</div>"
+   }
+  ],
+  "salaryRange": {
+   "min": 199999,
+   "max": 271000,
+   "currency": "USD",
+   "interval": "per-year-salary"
+  },
+  "text": "Senior Radar Engineer",
+  "country": "US",
+  "workplaceType": "onsite",
+  "hostedUrl": "https://jobs.lever.co/zoox/09924dfa-16b4-415a-828e-4ae7d903ecc2",
+  "applyUrl": "https://jobs.lever.co/zoox/09924dfa-16b4-415a-828e-4ae7d903ecc2/apply"
+ },
+ {
+  "additionalPlain": "$30 per hour.\n \nThis is a contract position and employment for this position will be through a vendor contracted with Zoox. The hourly pay range is posted and you will be eligible for a benefits package as offered by the vendor.\n",
+  "additional": "<div>\n<div>$30 per hour.</div>\n<div>&nbsp;</div>\n<div>This is a contract position and employment for this position will be through a vendor contracted with Zoox. The hourly pay range is posted and you will be eligible for a benefits package as offered by the vendor.</div>\n</div>",
+  "categories": {
+   "commitment": "Contract",
+   "department": "Software",
+   "location": "Foster City, CA",
+   "team": "Software Platforms and Product",
+   "allLocations": [
+    "Foster City, CA",
+    "San Diego, CA",
+    "Seattle, WA"
+   ]
+  },
+  "createdAt": 1776284294993,
+  "descriptionPlain": "About Zoox\nZoox is transforming mobility with fully autonomous, electric vehicles designed from the ground up for a driverless future. Our mission is to make transportation safer, more sustainable, and accessible to everyone. At Zoox, innovation, collaboration, and a bold vision for the future drive everything we do.\nAbout Our Part Time Student Worker Program\nZoox’s program offers hands-on experience with cutting-edge technology, mentorship from some of the industry’s brightest minds, and the opportunity to make meaningful contributions to real projects. We seek part time student workers  who demonstrate strong academic performance, engagement beyond the classroom, intellectual curiosity, and a genuine interest in Zoox’s mission. \nProject Overview\nZoox is seeking a motivated Firmware Engineer student worker to join our team, focusing on diagnostic services for the thermal and body systems. This is an opportunity to own highly-visible, foundational projects where you will extend our existing diagnostic infrastructure. You will work on the full development cycle of robot firmware development.\n \n",
+  "description": "<div>\n<h4><strong>About Zoox</strong></h4>\n<p>Zoox is transforming mobility with fully autonomous, electric vehicles designed from the ground up for a driverless future. Our mission is to make transportation safer, more sustainable, and accessible to everyone. At Zoox, innovation, collaboration, and a bold vision for the future drive everything we do.</p>\n<h4><strong>About Our Part Time Student Worker Program</strong></h4>\n<p>Zoox’s program offers hands-on experience with cutting-edge technology, mentorship from some of the industry’s brightest minds, and the opportunity to make meaningful contributions to real projects. We seek part time student workers&nbsp; who demonstrate strong academic performance, engagement beyond the classroom, intellectual curiosity, and a genuine interest in Zoox’s mission.&nbsp;</p>\n<strong>Project Overview</strong>\n<p>Zoox is seeking a motivated Firmware Engineer student worker to join our team, focusing on diagnostic services for the thermal and body systems. This is an opportunity to own highly-visible, foundational projects where you will extend our existing diagnostic infrastructure. You will work on the full development cycle of robot firmware development.</p>\n</div>\n<div>&nbsp;</div>",
+  "id": "07f0834f-06ec-44c7-a24b-3efa08589d38",
+  "lists": [
+   {
+    "text": "In this role, you will:",
+    "content": "\n<li>Work on the development of diagnostics for autonomous vehicle software, ensuring robust fault detection, reactions, and serviceability</li>\n<li>Design, develop, and test embedded software for body, thermal, lighting, and door functions of the Zoox vehicle</li>\n<li>Contribute to all phases of the software development cycle including prototyping, requirements capture, design, implementation, and validation</li>\n<li>Collaborate with system, software, hardware, and test engineers to define, implement, and validate diagnostic requirements</li>\n"
+   },
+   {
+    "text": "Qualifications:",
+    "content": "\n<li>Currently enrolled in a Bachelor's or Master's program in computer science, computer engineering, electrical engineering or equivalent experience</li>\n<li>Proficiency in modern C++ for firmware development</li>\n<li>Experience with Python programming</li>\n<li>Experience with embedded micro-controllers and/or microprocessors (ARM, PowerPC)</li>\n<li>Basic knowledge of control systems for electromechanical systems</li>\n"
+   },
+   {
+    "text": "Bonus Qualifications:",
+    "content": "\n<li>Familiarity with C++ unit testing principles and framework such as gtest</li>\n<li>Hands-on experience with hardware bring-up and system debugging</li>\n<li>Understanding of sensors and actuators and automotive communication protocols (CAN, LIN)</li>\n"
+   },
+   {
+    "text": "Program Requirements:",
+    "content": "\n<li>Currently pursuing a B.S. or M.S., in a relevant engineering field</li>\n<li>Available for a 6 month project</li>\n<li>Able to commit to at least 20 hours per week</li>\n<li>Ability to commute on-site to one of our offices</li>\n<li>Student Worker may not use proprietary Zoox information in university theses, publications, or share it outside</li>\n"
+   }
+  ],
+  "text": "Contract Student Worker  – Firmware Engineer (FW Thermal/Body)",
+  "country": "US",
+  "workplaceType": "hybrid",
+  "hostedUrl": "https://jobs.lever.co/zoox/07f0834f-06ec-44c7-a24b-3efa08589d38",
+  "applyUrl": "https://jobs.lever.co/zoox/07f0834f-06ec-44c7-a24b-3efa08589d38/apply"
+ }
+]

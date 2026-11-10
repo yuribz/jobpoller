@@ -1,0 +1,59 @@
+{
+ "id": 50338728,
+ "created_at": "2026-11-02T16:01:37.000Z",
+ "title": "Ask HN: Who is hiring? (November 2026)",
+ "type": "story",
+ "children": [
+  {
+   "author": "user0",
+   "children": [],
+   "created_at": "2026-11-03T15:08:09.000Z",
+   "created_at_i": 1793718489,
+   "id": 50352957,
+   "options": [],
+   "parent_id": 50338728,
+   "points": null,
+   "story_id": 50338728,
+   "text": "SEEKING FREELANCER | Devops Engineer | Remote - UK or EU<p>getregistered is a better way to do event registration.<p>We&#x27;re looking for an experienced devops freelancer to help manage and enhance our GCP + Terraform + GitLab based stack in our SOC2 &#x2F; PCI environment. Candidates must be willing to undergo a background check.<p>Please email person@example.com with LinkedIn &#x2F; CV &#x2F; Samples of work.",
+   "title": null,
+   "type": "comment",
+   "url": null
+  },
+  {
+   "author": "user1",
+   "children": [],
+   "created_at": "2026-11-03T08:49:16.000Z",
+   "created_at_i": 1793695756,
+   "id": 50349601,
+   "options": [],
+   "parent_id": 50338728,
+   "points": null,
+   "story_id": 50338728,
+   "text": "DigitalTolk is hiring for remote positions across Pakistan, India and Philippines. Right now, we are looking for Senior Software Engineering Manager. Full Job description and to apply at <a href=\"https:&#x2F;&#x2F;talent.digitaltolk.com&#x2F;candidate&#x2F;jobs&#x2F;senior-software-engineering-manager-remote\" rel=\"nofollow\">https:&#x2F;&#x2F;talent.digitaltolk.com&#x2F;candidate&#x2F;jobs&#x2F;senior-softwar...</a>",
+   "title": null,
+   "type": "comment",
+   "url": null
+  },
+  {
+   "author": "user2",
+   "children": [],
+   "created_at": "2026-11-03T06:17:31.000Z",
+   "created_at_i": 1793686651,
+   "id": 50348693,
+   "options": [],
+   "parent_id": 50338728,
+   "points": null,
+   "story_id": 50338728,
+   "text": "India",
+   "title": null,
+   "type": "comment",
+   "url": null
+  },
+  {
+   "id": 1,
+   "author": null,
+   "text": null,
+   "children": []
+  }
+ ]
+}
