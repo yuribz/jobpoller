@@ -72,3 +72,40 @@ def test_exclude_text_and_age() -> None:
 def test_negative_keywords_clamp_at_zero() -> None:
     c = crit(keywords={"php": -20, "python": 8}, min_score=0)
     assert score_job(make(description="PHP and Python"), c, NOW) == 0
+
+
+def test_explain_reports_the_rejecting_rule() -> None:
+    from jobpoller.scoring import explain_job
+
+    def why(j: Job, c: Criteria) -> str:
+        v = explain_job(j, c, NOW)
+        assert not v.passed
+        return v.reason
+
+    assert why(make(title="Account Executive"), crit()) == "title:no include match"
+    assert why(make(title="Staff Software Engineer"), crit()) == "title:excluded 'staff'"
+    assert why(make(location="Austin, TX"), crit()) == "location:no match 'Austin, TX'"
+    assert why(make(location="Berlin"), crit(exclude_locations=["berlin"])) == (
+        "location:excluded 'berlin'"
+    )
+    assert why(make(description="python ts/sci"), crit(exclude_text=["ts/sci"])) == (
+        "text:excluded 'ts/sci'"
+    )
+    assert why(make(posted_at=NOW - timedelta(days=90)), crit(max_age_days=45)) == "age:90d > 45d"
+    weak = explain_job(make(description="We use Go."), crit(), NOW)
+    assert (weak.passed, weak.score, weak.reason) == (False, 0, "score 0 < min 10")
+    ok = explain_job(make(), crit(), NOW)
+    assert (ok.passed, ok.score, ok.reason) == (True, 12, "")
+
+
+def test_score_job_matches_explain_job_everywhere() -> None:
+    from jobpoller.scoring import explain_job
+
+    jobs = [
+        make(), make(title="Staff Engineer"), make(location="Austin, TX"),
+        make(description="x"), make(posted_at=NOW - timedelta(days=99)),
+        make(location="Austin, TX", remote=True), make(posted_at=None),
+    ]
+    for j in jobs:
+        v = explain_job(j, crit(), NOW)
+        assert score_job(j, crit(), NOW) == (v.score if v.passed else None)

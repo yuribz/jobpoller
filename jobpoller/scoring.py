@@ -32,29 +32,47 @@ def has_term(term: str, text: str) -> bool:
     return _term_re(term).search(text.lower()) is not None
 
 
-def score_job(job: Job, criteria: Criteria, now: datetime) -> int | None:
-    """Return a 0-100 score, or None if a hard filter rejects the job."""
+@dataclass(frozen=True)
+class Verdict:
+    """Outcome of scoring one job: kept or rejected, and exactly why."""
+
+    passed: bool
+    score: int | None  # None if a hard filter rejected it before scoring
+    reason: str  # "" when passed; otherwise e.g. "title:excluded 'staff'" or "score 8 < min 12"
+
+
+def _reject(reason: str) -> Verdict:
+    return Verdict(False, None, reason)
+
+
+def explain_job(job: Job, criteria: Criteria, now: datetime) -> Verdict:
+    """Apply every filter in order, reporting the first one that rejects the job."""
     title = job.title
     if criteria.include_title and not any(has_term(t, title) for t in criteria.include_title):
-        return None
-    if any(has_term(t, title) for t in criteria.exclude_title):
-        return None
+        return _reject("title:no include match")
+    for t in criteria.exclude_title:
+        if has_term(t, title):
+            return _reject(f"title:excluded '{t}'")
 
     loc = job.location.lower()
-    if any(x.lower() in loc for x in criteria.exclude_locations):
-        return None
+    for x in criteria.exclude_locations:
+        if x.lower() in loc:
+            return _reject(f"location:excluded '{x}'")
     if criteria.locations:
         in_place = any(x.lower() in loc for x in criteria.locations)
         if not (in_place or (criteria.accept_remote and job.remote)):
-            return None
+            shown = job.location[:40] or "(none)"
+            return _reject(f"location:no match '{shown}'")
 
     body = f"{job.title}\n{job.description}"
-    if any(has_term(t, body) for t in criteria.exclude_text):
-        return None
+    for t in criteria.exclude_text:
+        if has_term(t, body):
+            return _reject(f"text:excluded '{t}'")
 
     if criteria.max_age_days is not None and job.posted_at is not None:
-        if now - job.posted_at > timedelta(days=criteria.max_age_days):
-            return None
+        age = now - job.posted_at
+        if age > timedelta(days=criteria.max_age_days):
+            return _reject(f"age:{age.days}d > {criteria.max_age_days}d")
 
     score = 0
     for term, weight in criteria.keywords.items():
@@ -63,4 +81,12 @@ def score_job(job: Job, criteria: Criteria, now: datetime) -> int | None:
         if has_term(term, job.title):
             score += weight  # title hits count double
     score = max(0, min(100, score))
-    return score if score >= criteria.min_score else None
+    if score < criteria.min_score:
+        return Verdict(False, score, f"score {score} < min {criteria.min_score}")
+    return Verdict(True, score, "")
+
+
+def score_job(job: Job, criteria: Criteria, now: datetime) -> int | None:
+    """Return a 0-100 score, or None if any filter rejects the job."""
+    verdict = explain_job(job, criteria, now)
+    return verdict.score if verdict.passed else None
