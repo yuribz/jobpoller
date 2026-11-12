@@ -15,6 +15,7 @@ from .bench import compare, format_report, run_bench
 from .config import PROFILES, Config, ConfigError, load_config
 from .digest import render_digest
 from .doctor import create_config_from_example, run_checks
+from .listmd import render_list_md
 from .manual import ManualError, build_job, decode, extract, read_file
 from .models import STATUSES
 from .notify import notify
@@ -167,7 +168,9 @@ def _cmd_status(config: Config, cmd: str, ids: list[int], now: datetime) -> int:
         store.close()
 
 
-def _cmd_list(config: Config, status: str | None, min_fit: int | None, verbose: bool) -> int:
+def _cmd_list(
+    config: Config, status: str | None, min_fit: int | None, verbose: bool, markdown: bool = False
+) -> int:
     store = Store(config.db)
     try:
         rows = store.list_jobs(status, min_fit)
@@ -175,6 +178,9 @@ def _cmd_list(config: Config, status: str | None, min_fit: int | None, verbose: 
         store.close()
     if not rows:
         print("no matching jobs")
+        return 0
+    if markdown:
+        print(render_list_md(rows), end="")
         return 0
     for job in rows:
         label = f"fit {job.fit:3d}" if job.fit is not None else f"kw  {job.score:3d}"
@@ -472,6 +478,7 @@ def _parser() -> argparse.ArgumentParser:
     list_p = sub.add_parser("list", parents=[common], help="show queued jobs, best first")
     list_p.add_argument("--status", choices=STATUSES)
     list_p.add_argument("--min-fit", type=int, help="LLM fit (keyword score if LLM was off)")
+    list_p.add_argument("-m", "--markdown", action="store_true", help="output as Markdown")
     list_p.add_argument("-v", "--verbose", action="store_true", help="show link and summary")
 
     add_p = sub.add_parser(
@@ -537,7 +544,7 @@ def main(
     if args.cmd in _STATUS_COMMANDS:
         return _cmd_status(config, args.cmd, args.ids, now)
     if args.cmd == "list":
-        return _cmd_list(config, args.status, args.min_fit, args.verbose)
+        return _cmd_list(config, args.status, args.min_fit, args.verbose, args.markdown)
     if args.cmd == "show":
         return _cmd_show(config, args.id, args.json)
     if args.cmd == "digest":

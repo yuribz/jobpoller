@@ -177,6 +177,7 @@ Handy variations:
 ```bash
 jobpoller list --status new           # only what you haven't triaged
 jobpoller list --min-fit 75 -v        # strong matches, with link, summary and red flags
+jobpoller list -m                      # Markdown: headers per status, bold fit, linked, red flags (pipe into a viewer like glow, or paste into notes)
 jobpoller digest --since 3d           # only jobs first seen in the last 3 days
 jobpoller run --dry-run               # preview without queuing anything
 ```
