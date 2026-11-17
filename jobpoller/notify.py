@@ -39,14 +39,25 @@ def notify(
     matches: Sequence[Match],
     client: httpx.Client,
     runner: Runner | None = None,
+    status: str = "",
 ) -> list[str]:
-    """Send notifications; returns warnings instead of raising."""
+    """Send notifications; returns warnings instead of raising.
+
+    With no strong match, ntfy (only) gets a low-priority heartbeat carrying `status`, so a
+    silent day is distinguishable from a run that never happened.
+    """
     message = summarize(matches, cfg.threshold)
-    if message is None:
-        return []
-    title, body, url = message
     warnings: list[str] = []
     try:
+        if message is None:
+            if cfg.ntfy:
+                title = f"jobpoller: no fit >= {cfg.threshold} today"
+                body = status or "run completed"
+                warnings += _ntfy(cfg.ntfy, title, body, "", client, quiet=True)
+            return warnings
+        title, body, url = message
+        if status:
+            body = f"{body}\n{status}"
         if cfg.desktop:
             warnings += _desktop(title, body, runner or subprocess.run)
         if cfg.ntfy:
@@ -74,9 +85,13 @@ def _desktop(title: str, body: str, runner: Runner) -> list[str]:
     return []
 
 
-def _ntfy(topic: str, title: str, body: str, link: str, client: httpx.Client) -> list[str]:
+def _ntfy(
+    topic: str, title: str, body: str, link: str, client: httpx.Client, quiet: bool = False
+) -> list[str]:
     # HTTP headers are latin-1; keep the title safe and put full text in the body.
     headers = {"Title": title.encode("ascii", "replace").decode("ascii")}
+    if quiet:
+        headers["Priority"] = "low"  # heartbeat: no sound or vibration
     if link.startswith(("http://", "https://")) and link.isascii():
         headers["Click"] = link  # tapping the push opens the posting
     try:

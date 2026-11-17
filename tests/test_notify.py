@@ -54,10 +54,28 @@ def test_desktop_notification_sent_once_with_summary() -> None:
     assert run.calls[0][2] == "jobpoller: 2 strong matches" and "Role 2" in run.calls[0][3]
 
 
-def test_below_threshold_sends_nothing() -> None:
+def test_below_threshold_sends_no_desktop_notification() -> None:
     run = FakeRun()
     assert notify(NotifyConfig(), [match(1, 79)], client(), run) == []
     assert run.calls == []
+
+
+def test_ntfy_heartbeat_when_nothing_strong() -> None:
+    seen: list[httpx.Request] = []
+
+    def ok(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200)
+
+    cfg = NotifyConfig(threshold=85, desktop=False, ntfy="https://ntfy.example/t")
+    assert notify(cfg, [match(1, 84)], client(ok), status="fetched 9; 2 source errors") == []
+    assert notify(cfg, [], client(ok)) == []
+    assert len(seen) == 2
+    assert seen[0].headers["Title"] == "jobpoller: no fit >= 85 today"
+    assert seen[0].headers["Priority"] == "low" and "Click" not in seen[0].headers
+    assert b"2 source errors" in seen[0].content
+    assert notify(cfg, [match(1, 85)], client(ok), status="s") == []
+    assert "Priority" not in seen[2].headers and seen[2].content.endswith(b"\ns")
 
 
 @pytest.mark.parametrize(

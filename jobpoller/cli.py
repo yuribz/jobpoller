@@ -559,7 +559,13 @@ def main(
                 return _cmd_add(config, args, ranker, now)
             report = run(config, client, now, args.dry_run, ranker)
             if not args.dry_run:
-                warnings = notify(config.notify, report.new, client)
+                status = (
+                    f"fetched {report.fetched}, matched {report.matched}, "
+                    f"added {len(report.new)}"
+                )
+                if report.errors:
+                    status += f"; {len(report.errors)} source errors"
+                warnings = notify(config.notify, report.new, client, status=status)
     finally:
         if ranker is not None:
             ranker.close()
