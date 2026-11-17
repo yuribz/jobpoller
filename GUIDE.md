@@ -310,6 +310,8 @@ jobs they disagree on most. On the reference machine (RX 7900 GRE) `qwen3:14b` t
 | `applied ID...` | Mark applied |
 | `digest [--open] [--since 7d] [--min-fit N] [--out FILE]` | Write the HTML page |
 | `schedule install\|remove\|status [--time HH:MM] [--dry-run]` | Daily systemd timer |
+| `mcp [--read-only]` | Serve triage tools over MCP (stdio) for Claude Desktop and other clients |
+| `chat [--model M] [--read-only] [--yes]` | Triage by chatting with your local Ollama model |
 | `tune [--against FILE] [--limit N]` | Preview what a criteria edit would change |
 | `bench --models A,B [-n 20]` | Compare AI models |
 
@@ -346,6 +348,9 @@ Start with `jobpoller init`; it names the problem and the fix for most of these.
 - Calls to Ollama on `localhost`. Your resume and the AI scores never go anywhere else.
 - Only if you set `notify.ntfy`: the top job's title is sent to that notification server.
   It's off by default.
+- Only if you triage through Claude Desktop (section 11): whatever the tools return, meaning
+  job rows and posting text you ask about, goes to Anthropic as part of that conversation. Your
+  resume is not exposed by any tool. `jobpoller chat` stays entirely on localhost.
 
 ---
 
@@ -357,3 +362,52 @@ output is one JSON object with `schema_version: 1` and these keys: `id`, `status
 `title`, `url`, `source` (`greenhouse`, `lever`, `ashby`, `hn` or `manual`), `location`, `posted_at` (ISO or null), `first_seen`, `fit` (integer or
 null), `keyword_score`, `summary`, `red_flags` (list), `description` (plain text, may be empty).
 A breaking change bumps `schema_version`. An unknown id exits 1 with the error on stderr.
+
+---
+
+## 11. Triage by chatting: Claude Desktop (MCP) or local Ollama
+
+Two front ends over the same tools: `list_jobs`, `get_job`, `dismiss`, `promote`, `undo_last`
+and `add_posting`. Nothing can apply to a job, mark one applied, run the poller or fetch a URL.
+`promote` only writes to your queue file, and `undo_last` reverts the last dismiss/promote batch.
+
+**Claude Desktop (or any stdio MCP client: Goose, LM Studio, ...)**
+
+```bash
+pip install -e ".[mcp]"          # the MCP SDK is an optional extra
+```
+
+Add this to Claude Desktop's config (Settings, Developer, Edit Config), using absolute paths
+because a GUI app doesn't see your venv, then restart it:
+
+```json
+{
+  "mcpServers": {
+    "jobpoller": {
+      "command": "/abs/path/to/jobpoller/.venv/bin/jobpoller",
+      "args": ["mcp", "--config", "/abs/path/to/jobpoller/config.yaml"]
+    }
+  }
+}
+```
+
+Claude Code: `claude mcp add jobpoller -- /abs/path/.venv/bin/jobpoller mcp --config /abs/path/config.yaml`.
+Add `--read-only` to the args to expose only `list_jobs` and `get_job`. Then ask "triage my new
+jobs": the server also offers a `triage` prompt.
+
+**Local model: `jobpoller chat`**
+
+Ollama has no MCP client, so `chat` runs the same tools in-process through Ollama's tool calling,
+using `llm.base_url` and `llm.model` from your config (`--model qwen3:8b` to override):
+
+```bash
+jobpoller chat                # asks before every dismiss/promote/add_posting
+jobpoller chat --read-only    # list and read only
+jobpoller chat --yes          # don't ask (you trust the model and the postings)
+```
+
+**Prompt injection.** Posting text is written by strangers and reaches a model that holds
+write tools. The tool results label it `untrusted_posting_text` and the instructions say to treat
+it as data, and the damage is bounded because no tool can send or submit anything and changes are
+reversible. A small local model is easier to steer than Claude, which is why `chat` confirms
+mutating calls by default. Keep that on for postings you haven't read.

@@ -20,6 +20,9 @@ python -m jobpoller run --dry-run      # preview
 python -m jobpoller run                # append new matches to discovered.md
 ```
 
+Triage by chatting: `pip install -e ".[mcp]"`, then `jobpoller mcp` (Claude Desktop) or
+`jobpoller chat` (local Ollama); see GUIDE.md section 11.
+
 Schedule it daily, e.g. cron: `0 8 * * * cd ~/jobpoller && python -m jobpoller run`.
 
 ## Local LLM ranking (Ollama)

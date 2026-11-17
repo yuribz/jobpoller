@@ -9,11 +9,11 @@ from pathlib import Path
 
 import pytest
 
-from jobpoller.cli import SHOW_SCHEMA_VERSION
 from jobpoller.config import load_config
 from jobpoller.migrations import MIGRATIONS
 from jobpoller.models import Job
 from jobpoller.store import Store
+from jobpoller.views import SHOW_SCHEMA_VERSION
 from tests.test_workflow import cli, populated  # noqa: F401  (fixture)
 
 NOW = datetime(2026, 11, 9, 12, 0, tzinfo=timezone.utc)

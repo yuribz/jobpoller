@@ -11,22 +11,26 @@ from pathlib import Path
 
 import httpx
 
+from .actions import add_posting, build_ranker, promote_jobs
 from .bench import compare, format_report, run_bench
+from .chat import repl
 from .config import PROFILES, Config, ConfigError, load_config
 from .digest import render_digest
 from .doctor import create_config_from_example, run_checks
 from .listmd import render_list_md
-from .manual import ManualError, build_job, decode, extract, read_file
+from .manual import ManualError, decode, extract, read_file
 from .models import STATUSES
 from .notify import notify
 from .pipeline import RunReport, collect, run
-from .queuefile import QueueError, add_to_queue_file
-from .ranker import LLMUnavailable, Ranker, RankError
+from .queuefile import QueueError
+from .ranker import LLMUnavailable, Ranker
 from .schedule import ScheduleError, apply_install, normalize_time, plan_install, remove, status
-from .scoring import criteria_from_json, explain_job, score_job
+from .scoring import criteria_from_json, score_job
 from .sources import BoardError, fetch_board
-from .store import QueuedJob, Store
+from .store import Store
+from .tools import ToolContext
 from .tune import format_result, tune
+from .views import job_payload
 
 _STATUS_COMMANDS = {"promote": "promoted", "dismiss": "dismissed", "applied": "applied"}
 
@@ -38,18 +42,6 @@ def _client(user_agent: str, transport: httpx.BaseTransport | None = None) -> ht
         follow_redirects=True,
         transport=transport,
     )
-
-
-def _build_ranker(config: Config, transport: httpx.BaseTransport | None) -> Ranker | None:
-    llm = config.llm
-    if not llm.enabled:
-        return None
-    if llm.resume_path is None:
-        raise ConfigError("llm.enabled requires llm.resume")
-    resume = llm.resume_path.read_text(encoding="utf-8")
-    if not resume.strip():
-        raise ConfigError(f"resume file is empty: {llm.resume_path}")
-    return Ranker(llm, resume, httpx.Client(timeout=llm.timeout_seconds, transport=transport))
 
 
 def _check(config: Config, client: httpx.Client, ranker: Ranker | None) -> int:
@@ -118,11 +110,6 @@ def _bench(
 # --- status workflow --------------------------------------------------------------------
 
 
-def _queue_status(job: QueuedJob) -> str:
-    label = "fit" if job.fit is not None else "kw"
-    return f"discovered ({label} {job.sort_key})"
-
-
 def _report_ids(store: Store, ids: list[int], changed: list[int], verb: str) -> int:
     """Print one line per requested id; returns 1 if any id does not exist."""
     bad = 0
@@ -145,24 +132,22 @@ def _cmd_status(config: Config, cmd: str, ids: list[int], now: datetime) -> int:
         return 2
     store = Store(config.db)
     try:
-        changed = store.set_status(ids, status, now)
-        if cmd == "promote" and config.queue_path is not None:
+        if cmd == "promote":
             try:
-                for job_id in changed:
-                    job = store.get(job_id)
-                    if job is None:  # cannot happen: just updated
-                        continue
-                    number = add_to_queue_file(
-                        config.queue_path, job.title, job.company, job.url, _queue_status(job)
-                    )
-                    note = f"queue row {number}" if number else "already in queue file"
-                    print(f"promoted #{job_id} {job.title[:60]} @ {job.company} ({note})")
+                result = promote_jobs(config, store, ids, now)
             except QueueError as exc:
-                store.undo_last(now)  # keep DB and queue file consistent
                 print(f"error: {exc}; status changes reverted", file=sys.stderr)
                 return 1
-            quiet = [i for i in ids if i not in changed]
+            for job_id in result.changed:
+                job = store.get(job_id)
+                if job is not None:
+                    print(
+                        f"promoted #{job_id} {job.title[:60]} @ {job.company}"
+                        f" ({result.notes.get(job_id, '')})"
+                    )
+            quiet = [i for i in ids if i not in result.changed]
             return _report_ids(store, quiet, [], "promoted")
+        changed = store.set_status(ids, status, now)
         return _report_ids(store, ids, changed, status)
     finally:
         store.close()
@@ -201,61 +186,61 @@ def _cmd_add(
     config: Config, args: argparse.Namespace, ranker: Ranker | None, now: datetime
 ) -> int:
     """Add a posting you saved or pasted yourself (e.g. from LinkedIn). Never fetches a page."""
-    try:
-        if args.file in (None, "-"):
-            if args.file is None and sys.stdin.isatty():
-                raise ManualError("give a .txt/.md/.html file, or pipe the posting text in")
-            extracted = extract(decode(sys.stdin.buffer.read()), args.format or "text")
-        else:
-            extracted = read_file(Path(args.file), args.format)
-        job, warnings = build_job(
-            extracted,
-            company=args.company or "",
-            title=args.title or "",
-            location=args.location or "",
-            url=args.url or "",
-        )
-    except ManualError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 1
-    for warning in warnings:
-        print(f"warn: {warning}", file=sys.stderr)
-
     store = Store(config.db)
     try:
-        existing = store.find_by_url(job.url)
-        if existing is not None:
-            print(f"already queued as #{existing} (nothing changed)")
-            job_id = existing
-        else:
-            ranking = None
-            if ranker is not None:
-                ranking = store.get_ranking(job, ranker.fingerprint)
-                if ranking is None:
-                    try:
-                        ranking = ranker.rank(job)
-                        store.put_ranking(job, ranker.fingerprint, ranking, now)
-                    except (LLMUnavailable, RankError) as exc:
-                        print(f"warn: not scored ({exc}); added without a fit", file=sys.stderr)
-            # You chose this job, so the keyword filters don't veto it; they only give a score.
-            keyword = explain_job(job, config.criteria, now).score or 0
-            store.add_if_new(job, keyword, now, ranking)
-            found = store.find_by_url(job.url)
-            if found is None:  # cannot happen: just inserted
-                print("error: could not save the job", file=sys.stderr)
-                return 1
-            job_id = found
-            label = f"fit {ranking.fit}" if ranking else f"kw {keyword}"
-            print(f"added #{job_id} {job.title[:60]} @ {job.company} ({label})")
-            print(f"  jobpoller show {job_id}   |   jobpoller promote {job_id}")
+        try:
+            if args.file in (None, "-"):
+                if args.file is None and sys.stdin.isatty():
+                    raise ManualError("give a .txt/.md/.html file, or pipe the posting text in")
+                extracted = extract(decode(sys.stdin.buffer.read()), args.format or "text")
+            else:
+                extracted = read_file(Path(args.file), args.format)
+            result = add_posting(
+                config,
+                store,
+                ranker,
+                extracted,
+                now,
+                company=args.company or "",
+                title=args.title or "",
+                location=args.location or "",
+                url=args.url or "",
+            )
+        except ManualError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
     finally:
         store.close()
+    for warning in result.warnings:
+        print(f"warn: {warning}", file=sys.stderr)
+    if not result.created:
+        print(f"already queued as #{result.job_id} (nothing changed)")
+    else:
+        label = f"fit {result.fit}" if result.fit is not None else f"kw {result.keyword}"
+        print(f"added #{result.job_id} {result.title[:60]} @ {result.company} ({label})")
+        print(f"  jobpoller show {result.job_id}   |   jobpoller promote {result.job_id}")
     if args.promote:
-        return _cmd_status(config, "promote", [job_id], now)
+        return _cmd_status(config, "promote", [result.job_id], now)
     return 0
 
 
-SHOW_SCHEMA_VERSION = 1  # bump on any breaking change to `show --json` (companion tools read it)
+def _cmd_mcp(config: Config, read_only: bool) -> int:
+    try:
+        from .mcp_server import serve
+    except ImportError:
+        print("error: MCP support is not installed: pip install 'jobpoller[mcp]'", file=sys.stderr)
+        return 1
+    return serve(config, read_only)
+
+
+def _cmd_chat(
+    config: Config,
+    args: argparse.Namespace,
+    transport: httpx.BaseTransport | None,
+    now: datetime,
+) -> int:
+    ctx = ToolContext(config, transport=transport, read_only=args.read_only, now=lambda: now)
+    return repl(config, ctx, model=args.model, assume_yes=args.yes, transport=transport)
 
 
 def _cmd_show(config: Config, job_id: int, as_json: bool) -> int:
@@ -270,29 +255,7 @@ def _cmd_show(config: Config, job_id: int, as_json: bool) -> int:
         return 1
     description, posted_at = posting
     if as_json:
-        print(
-            json.dumps(
-                {
-                    "schema_version": SHOW_SCHEMA_VERSION,
-                    "id": job.id,
-                    "status": job.status,
-                    "company": job.company,
-                    "title": job.title,
-                    "url": job.url,
-                    "source": job.source,
-                    "location": job.location,
-                    "posted_at": posted_at,
-                    "first_seen": job.first_seen,
-                    "fit": job.fit,
-                    "keyword_score": job.score,
-                    "summary": job.summary,
-                    "red_flags": list(job.red_flags),
-                    "description": description,
-                },
-                indent=2,
-                ensure_ascii=False,
-            )
-        )
+        print(json.dumps(job_payload(job, description, posted_at), indent=2, ensure_ascii=False))
         return 0
     label = f"fit {job.fit}" if job.fit is not None else f"kw {job.score}"
     print(f"{job.title} @ {job.company}  [{job.status}, {label}]")
@@ -497,6 +460,20 @@ def _parser() -> argparse.ArgumentParser:
     show_p.add_argument("id", type=int, help="id from `jobpoller list`")
     show_p.add_argument("--json", action="store_true", help="machine-readable (for other tools)")
 
+    mcp_p = sub.add_parser(
+        "mcp", parents=[common], help="serve triage tools over MCP (stdio), e.g. for Claude Desktop"
+    )
+    mcp_p.add_argument("--read-only", action="store_true", help="only expose list/get tools")
+
+    chat_p = sub.add_parser(
+        "chat", parents=[common], help="triage the queue by chatting with a local Ollama model"
+    )
+    chat_p.add_argument("--model", help="override llm.model for this session")
+    chat_p.add_argument("--read-only", action="store_true", help="only expose list/get tools")
+    chat_p.add_argument(
+        "--yes", action="store_true", help="don't ask before dismiss/promote/add_posting"
+    )
+
     dig = sub.add_parser("digest", parents=[common], help="write a static digest.html")
     dig.add_argument("--open", action="store_true", help="open it in your browser")
     dig.add_argument("--since", type=_since, help="only jobs first seen within e.g. 7d")
@@ -549,12 +526,16 @@ def main(
         return _cmd_show(config, args.id, args.json)
     if args.cmd == "digest":
         return _cmd_digest(config, args, now)
+    if args.cmd == "mcp":
+        return _cmd_mcp(config, args.read_only)
+    if args.cmd == "chat":
+        return _cmd_chat(config, args, transport, now)
     if args.cmd == "tune":
         return _cmd_tune(config, args, now)
 
     try:
         skip_ranker = args.cmd == "add" and args.no_score
-        ranker = None if skip_ranker else _build_ranker(config, transport)
+        ranker = None if skip_ranker else build_ranker(config, transport)
     except (OSError, ConfigError) as exc:
         print(f"config error: {exc}", file=sys.stderr)
         return 2
