@@ -217,6 +217,14 @@ jobpoller schedule remove
 - Pick another time with `--time 07:30`, or set `schedule_time` in the config.
 - If the computer was off at run time, the run happens next time it's on (`Persistent=true`).
 - Logs: `journalctl --user -u jobpoller.service -n 50`.
+- The timer runs a small launcher (`~/.config/systemd/user/jobpoller-run.sh`) that tries the
+  Python you installed with, then the project's `.venv`, then `python3`, and uses the first one
+  that can import jobpoller. A venv whose base Python was upgraded or removed no longer fails
+  every night in silence. Re-run `schedule install` after you recreate the venv elsewhere.
+- If `notify.ntfy` is set, a failed run (including "no working Python") pushes a high-priority
+  alert through `jobpoller-failed.service`, which uses the system `curl` rather than Python.
+- Build the venv from a pinned pyenv Python, never the system one, so a Fedora upgrade can't
+  hollow it out: `.python-version` pins 3.12.11 (`python -m venv .venv && pip install -e ".[dev]"`).
 - When a new job scores at or above `notify.threshold`, you get one desktop notification.
 - If `schedule status` says lingering is off, runs only happen while you're logged in. That's
   fine for a desktop; for always-on, run `loginctl enable-linger $USER`.

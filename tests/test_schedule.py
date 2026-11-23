@@ -12,7 +12,10 @@ from jobpoller.schedule import (
     apply_install,
     normalize_time,
     plan_install,
+    python_candidates,
     remove,
+    render_failure_service,
+    render_launcher,
     render_service,
     render_timer,
     status,
@@ -49,14 +52,62 @@ def test_time_normalization() -> None:
             normalize_time(bad)
 
 
-def test_service_quotes_paths_with_spaces_and_specials() -> None:
-    py = Path("/mnt/My Projects/jobpoller/.venv/bin/python")
-    cfg = Path("/mnt/My Projects/job 100%/config.yaml")
-    unit = render_service(py, cfg)
-    assert 'ExecStart="/mnt/My Projects/jobpoller/.venv/bin/python" -m jobpoller run' in unit
-    assert '--config "/mnt/My Projects/job 100%%/config.yaml"' in unit  # % is escaped
-    assert "WorkingDirectory=/mnt/My Projects/job 100%%" in unit
-    assert "Type=oneshot" in unit
+def test_service_runs_the_launcher_and_quotes_specials() -> None:
+    launcher = Path("/home/u/.config/systemd/user/jobpoller-run.sh")
+    unit = render_service(launcher, Path("/mnt/My Projects/job 100%"), "jobpoller-failed.service")
+    assert f'ExecStart=/bin/sh "{launcher}"' in unit
+    assert "WorkingDirectory=/mnt/My Projects/job 100%%" in unit  # % is escaped
+    assert "OnFailure=jobpoller-failed.service" in unit and "Type=oneshot" in unit
+    assert "OnFailure" not in render_service(launcher, Path("/p"))
+
+
+def test_candidates_prefer_installer_python_then_project_venv_then_path() -> None:
+    cfg = Path("/mnt/My Projects/jobpoller/config.yaml")
+    assert python_candidates(Path("/other/python"), cfg) == [
+        "/other/python", "/mnt/My Projects/jobpoller/.venv/bin/python", "python3",
+    ]  # fmt: skip
+    venv = Path("/mnt/My Projects/jobpoller/.venv/bin/python")
+    assert python_candidates(venv, cfg) == [str(venv), "python3"]  # no duplicate
+
+
+def _fake_python(path: Path, works: bool) -> str:
+    """A stand-in interpreter: `-c` (the import probe) succeeds or fails; otherwise record argv."""
+    probe = "exit 0" if works else "exit 1"
+    path.write_text(
+        f'#!/bin/sh\n[ "$1" = "-c" ] && {{ {probe}; }}\necho "$@" > "{path}.ran"\n'
+    )
+    path.chmod(0o755)
+    return str(path)
+
+
+def test_launcher_skips_broken_pythons_and_runs_the_first_working_one(tmp_path: Path) -> None:
+    cfg = tmp_path / "my config.yaml"
+    bad = _fake_python(tmp_path / "bad", works=False)
+    good = _fake_python(tmp_path / "good space", works=True)
+    script = tmp_path / "run.sh"
+    script.write_text(render_launcher([bad, str(tmp_path / "missing"), good, "python3"], cfg))
+    done = subprocess.run(["/bin/sh", str(script)], capture_output=True, text=True)
+    assert done.returncode == 0, done.stderr
+    assert f"skipping {bad}" in done.stderr
+    assert (tmp_path / "good space.ran").read_text().strip() == f"-m jobpoller run --config {cfg}"
+    assert not (tmp_path / "bad.ran").exists()
+
+
+def test_launcher_exits_127_when_no_python_works(tmp_path: Path) -> None:
+    script = tmp_path / "run.sh"
+    script.write_text(
+        render_launcher([_fake_python(tmp_path / "bad", works=False)], tmp_path / "c.yaml")
+    )
+    done = subprocess.run(["/bin/sh", str(script)], capture_output=True, text=True)
+    assert done.returncode == 127 and "no working Python found" in done.stderr
+
+
+def test_failure_unit_uses_curl_not_python() -> None:
+    unit = render_failure_service(Path("/usr/bin/curl"), "https://ntfy.example/my%topic")
+    assert 'ExecStart="/usr/bin/curl"' in unit
+    assert '"https://ntfy.example/my%%topic"' in unit  # % escaped for systemd
+    assert '"Title: jobpoller run failed"' in unit and '"Priority: high"' in unit
+    assert "--fail" in unit and "python" not in unit.lower()
 
 
 def test_timer_is_daily_and_persistent() -> None:
@@ -80,6 +131,33 @@ def test_install_writes_units_then_reloads_and_enables(tmp_path: Path) -> None:
     apply_install(plan, FakeSystemctl())  # reinstalling is fine (idempotent)
 
 
+def test_install_writes_executable_launcher_and_failure_unit(tmp_path: Path) -> None:
+    plan = plan_install(
+        Path("/venv/bin/python"), Path("/p/config.yaml"), "08:00", tmp_path / "u",
+        failure_ntfy="https://ntfy.example/t", curl=Path("/usr/bin/curl"),
+    )  # fmt: skip
+    assert any("jobpoller-failed.service" in line for line in plan.describe())
+    apply_install(plan, FakeSystemctl())
+    launcher = tmp_path / "u" / "jobpoller-run.sh"
+    assert launcher.stat().st_mode & 0o111 and launcher.read_text() == plan.launcher_text
+    failed = (tmp_path / "u" / "jobpoller-failed.service").read_text()
+    assert "https://ntfy.example/t" in failed
+    main_unit = (tmp_path / "u" / "jobpoller.service").read_text()
+    assert "OnFailure=jobpoller-failed.service" in main_unit
+
+
+def test_no_failure_unit_without_ntfy_and_missing_curl_is_an_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plan = plan_install(Path("/p/python"), Path("/p/c.yaml"), "08:00", tmp_path)
+    assert plan.failure_path is None and "OnFailure" not in plan.service_text
+    apply_install(plan, FakeSystemctl())
+    assert not (tmp_path / "jobpoller-failed.service").exists()
+    monkeypatch.setattr("shutil.which", lambda _name: None)
+    with pytest.raises(ScheduleError, match="curl not found"):
+        plan_install(Path("/p/python"), Path("/p/c.yaml"), "08:00", tmp_path, failure_ntfy="https://n/t")
+
+
 def test_failed_systemctl_raises_with_its_message(tmp_path: Path) -> None:
     plan = plan_install(Path("/p/python"), Path("/p/c.yaml"), "08:00", tmp_path)
     with pytest.raises(ScheduleError, match="boom"):
@@ -91,7 +169,7 @@ def test_remove_deletes_units_and_is_a_noop_when_absent(tmp_path: Path) -> None:
     apply_install(plan, FakeSystemctl())
     fake = FakeSystemctl()
     assert remove(tmp_path, fake) is True
-    assert list(tmp_path.iterdir()) == []
+    assert list(tmp_path.iterdir()) == []  # service, timer, launcher
     assert ["systemctl", "--user", "disable", "--now", "jobpoller.timer"] in fake.calls
     assert fake.calls[-1] == ["systemctl", "--user", "daemon-reload"]
     assert remove(tmp_path, FakeSystemctl()) is False

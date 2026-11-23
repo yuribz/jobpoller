@@ -335,13 +335,25 @@ def _cmd_schedule(args: argparse.Namespace) -> int:
             return 0
         config = load_config(args.config)
         time = normalize_time(args.time) if args.time else config.schedule_time
-        plan = plan_install(Path(sys.executable), args.config.resolve(), time)
-        print(f"Daily run at {time} using {sys.executable}\nThis will:")
+        plan = plan_install(
+            Path(sys.executable),
+            args.config.resolve(),
+            time,
+            failure_ntfy=config.notify.ntfy,
+        )
+        print(f"Daily run at {time}; Python resolved at run time, preferring {sys.executable}")
+        alert = "yes, via curl" if plan.failure_path else "no (notify.ntfy is unset)"
+        print(f"Failure alert to ntfy: {alert}")
+        print("This will:")
         for line in plan.describe():
             print(f"  {line}")
         if args.dry_run:
             print(f"\n--- {plan.service_path.name}\n{plan.service_text}")
-            print(f"--- {plan.timer_path.name}\n{plan.timer_text}(dry run: nothing changed)")
+            print(f"--- {plan.timer_path.name}\n{plan.timer_text}")
+            print(f"--- {plan.launcher_path.name}\n{plan.launcher_text}")
+            if plan.failure_path is not None:
+                print(f"--- {plan.failure_path.name}\n{plan.failure_text}")
+            print("(dry run: nothing changed)")
             return 0
         apply_install(plan)
         print("installed. Check with `jobpoller schedule status`.")
