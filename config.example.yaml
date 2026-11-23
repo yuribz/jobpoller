@@ -49,8 +49,9 @@ llm:
   # timeout_seconds: 180               # first call includes model load time
   resume: resume.md                    # your master resume as .md/.txt (not .docx)
   preferences: >-
-    Backend and systems engineering. Language priority: Python, Java, C#, Rust, C/C++.
-    San Diego or remote. Entry-to-mid level; strongly dislikes PHP-only and front-end-only roles.
+    Backend and systems engineering. Language priority: Python, Go, Rust.
+    Remote or <your city>. Mid level; strongly dislikes PHP-only and front-end-only roles.
+    (Describe what you want in plain English; the model reads this next to your resume.)
   min_fit: 50                          # 80+ strong, 60-79 good, 40-59 stretch
 
 criteria:
@@ -58,7 +59,7 @@ criteria:
                   infrastructure, swe, developer]
   exclude_title: [staff, principal, director, vp, manager, intern, internship, sales, mechanical,
                   hardware, recruiter, designer, support, marketing]
-  locations: [san diego, california, remote]   # substrings, case-insensitive
+  locations: [remote, new york, california]    # substrings, case-insensitive; use your own
   accept_remote: true
   exclude_locations: [emea, europe, india, united kingdom, london, germany, canada, brazil]
   # Hard-reject phrases in the posting text. Uncomment what applies to you:

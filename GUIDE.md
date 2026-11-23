@@ -92,7 +92,7 @@ hn: true                         # also read the monthly "Who is hiring?" thread
 criteria:
   include_title: [software, backend, platform]   # title must contain one of these
   exclude_title: [staff, principal, manager]     # ...and none of these
-  locations: [san diego, remote]
+  locations: [remote, new york]
   exclude_locations: [germany, india]
   min_score: 12                  # keyword score needed to count as a match
   keywords: {python: 8, rust: 6, php: -4}        # weight per keyword found in the posting
@@ -103,7 +103,7 @@ llm:
   resume: resume.md
   min_fit: 50                    # AI fit below this is not queued
   preferences: >-
-    Backend and systems work. San Diego or remote. Entry-to-mid level.
+    Backend and systems work. Remote or New York. Mid level.
 
 queue_path: ~/jobs/job_queue.md  # where `promote` writes
 schedule_time: "08:00"           # daily run time (keep the quotes)
