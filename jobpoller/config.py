@@ -74,6 +74,8 @@ class Config:
     notify: NotifyConfig = field(default_factory=NotifyConfig)
     schedule_time: str = "08:00"  # daily run time for `jobpoller schedule install`
     user_agent: str = DEFAULT_UA
+    log_path: Path = Path("jobpoller.log")
+    log_days: int = 30  # rotated logs older than this are deleted
 
 
 class ConfigError(ValueError):
@@ -164,6 +166,10 @@ def load_config(path: Path) -> Config:
     except ScheduleError as exc:
         raise ConfigError(f"schedule_time: {exc}") from exc
 
+    log_days = int(raw.get("log_days", 30))
+    if log_days < 1:
+        raise ConfigError("log_days must be at least 1")
+
     return Config(
         boards=boards,
         hn=bool(raw.get("hn", True)),
@@ -178,4 +184,6 @@ def load_config(path: Path) -> Config:
         notify=notify,
         schedule_time=schedule_time,
         user_agent=str(raw.get("user_agent", DEFAULT_UA)),
+        log_path=_resolve(base, raw.get("log", "jobpoller.log")),
+        log_days=log_days,
     )

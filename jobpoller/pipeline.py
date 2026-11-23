@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -14,6 +15,8 @@ from .ranker import LLMUnavailable, Ranker, RankError
 from .scoring import criteria_to_json, score_job
 from .sources import BoardError, fetch_board, fetch_hn_latest
 from .store import Store
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -36,13 +39,19 @@ def collect(config: Config, client: httpx.Client, report: RunReport) -> list[Job
         if i and config.delay_seconds:
             time.sleep(config.delay_seconds)
         try:
-            jobs.extend(fetch_board(client, ats, slug))
+            fetched = fetch_board(client, ats, slug)
+            log.info("fetched %s/%s: %d postings", ats, slug, len(fetched))
+            jobs.extend(fetched)
         except BoardError as exc:
+            log.warning("board %s/%s failed: %s", ats, slug, exc)
             report.errors.append(str(exc))
     if config.hn:
         try:
-            jobs.extend(fetch_hn_latest(client))
+            hn_jobs = fetch_hn_latest(client)
+            log.info("fetched hn: %d postings", len(hn_jobs))
+            jobs.extend(hn_jobs)
         except (BoardError, KeyError, TypeError) as exc:
+            log.warning("hn failed: %s", exc)
             report.errors.append(f"hn: {exc}")
     return jobs
 
@@ -121,11 +130,13 @@ def _process(
                 try:
                     ranking = ranker.rank(job)
                 except LLMUnavailable as exc:
+                    log.warning("llm unavailable, deferring remaining jobs: %s", exc)
                     report.errors.append(f"llm: {exc}; deferring remaining jobs")
                     llm_up = False
                     report.deferred += 1
                     continue
                 except RankError as exc:
+                    log.warning("rank failed for %s: %s", job.key, exc)
                     report.errors.append(f"rank {job.key}: {exc}")
                     report.deferred += 1
                     continue
@@ -136,5 +147,6 @@ def _process(
         if dry_run:
             report.new.append(Match(job, score, ranking))
         elif store.add_if_new(job, score, now, ranking):
+            log.info("queued %s (kw %d, fit %s)", job.key, score, ranking.fit if ranking else "-")
             report.new.append(Match(job, score, ranking))
 

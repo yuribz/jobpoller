@@ -10,6 +10,8 @@ Posting text is third-party and untrusted: it is returned under `untrusted_posti
 
 from __future__ import annotations
 
+import logging
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -29,6 +31,8 @@ from .manual import extract
 from .models import STATUSES
 from .store import Store
 from .views import job_payload, job_row
+
+log = logging.getLogger(__name__)
 
 MAX_LIMIT = 100
 DEFAULT_LIMIT = 25
@@ -51,6 +55,7 @@ class ToolContext:
     config: Config
     transport: httpx.BaseTransport | None = None  # tests inject a mock Ollama
     read_only: bool = False
+    origin: str = "tools"  # who is calling: "mcp" or "chat"; shows up in the log
     now: Callable[[], datetime] = lambda: datetime.now(timezone.utc)  # noqa: E731
 
 
@@ -326,8 +331,49 @@ def get_tool(name: str) -> Tool | None:
     return _BY_NAME.get(name)
 
 
+def _brief(value: Any, depth: int = 0) -> Any:
+    """Shrink a value for the log: long text becomes its length, long lists their count.
+
+    Posting text is large, third-party and may hold personal data; the log records what
+    happened, not the content.
+    """
+    if isinstance(value, str):
+        return value if len(value) <= 80 else f"<{len(value)} chars>"
+    if isinstance(value, list):
+        if len(value) > 10 or depth >= 2:
+            return f"[{len(value)} items]"
+        return [_brief(v, depth + 1) for v in value]
+    if isinstance(value, dict):
+        if depth >= 2:
+            return f"{{{len(value)} keys}}"
+        return {k: _brief(v, depth + 1) for k, v in value.items()}
+    return value
+
+
+def _summary(value: Any) -> str:
+    text = str(_brief(value))
+    return text if len(text) <= 300 else text[:300] + "..."
+
+
 def call_tool(ctx: ToolContext, name: str, args: dict[str, Any] | None) -> dict[str, Any]:
     """Run a tool; never raises. Errors come back as {"error": "..."} for the model to read."""
+    started = time.monotonic()
+    result = _call(ctx, name, args)
+    ms = (time.monotonic() - started) * 1000
+    if "error" in result:
+        log.warning(
+            "[%s] %s(%s) failed in %.0fms: %s",
+            ctx.origin, name, _summary(args or {}), ms, result["error"],
+        )
+    else:
+        log.info(
+            "[%s] %s(%s) ok in %.0fms -> %s",
+            ctx.origin, name, _summary(args or {}), ms, _summary(result),
+        )
+    return result
+
+
+def _call(ctx: ToolContext, name: str, args: dict[str, Any] | None) -> dict[str, Any]:
     tool = _BY_NAME.get(name)
     if tool is None:
         return {"error": f"unknown tool '{name}'; available: {', '.join(_BY_NAME)}"}

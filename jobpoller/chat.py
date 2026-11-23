@@ -9,6 +9,7 @@ than a frontier model. Nothing here can apply to a job or fetch a page.
 from __future__ import annotations
 
 import json
+import logging
 import re
 from collections.abc import Callable
 from dataclasses import replace
@@ -19,6 +20,8 @@ import httpx
 from .config import Config, LLMConfig
 from .ranker import LLMUnavailable
 from .tools import ToolContext, call_tool, get_tool, ollama_tool_specs
+
+log = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = (
     "You help the user triage a personal job queue using tools. Start with list_jobs, open "
@@ -121,6 +124,7 @@ def run_turn(
             tool = get_tool(name)
             needs_ok = tool is not None and tool.mutating and confirm is not None
             if needs_ok and confirm is not None and not confirm(name, args):
+                log.info("[chat] %s declined by user", name)
                 result: dict[str, Any] = {"error": "the user declined this action"}
             else:
                 result = call_tool(ctx, name, args)

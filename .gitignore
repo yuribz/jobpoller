@@ -6,6 +6,8 @@ resume.md
 *.sqlite3-*
 discovered.md
 digest.html
+*.log
+*.log.*
 
 # Python / tooling
 .venv/

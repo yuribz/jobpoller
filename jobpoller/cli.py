@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import re
 import sys
 import time
@@ -18,6 +19,7 @@ from .config import PROFILES, Config, ConfigError, load_config
 from .digest import render_digest
 from .doctor import create_config_from_example, run_checks
 from .listmd import render_list_md
+from .logsetup import setup_logging
 from .manual import ManualError, decode, extract, read_file
 from .models import STATUSES
 from .notify import notify
@@ -31,6 +33,8 @@ from .store import Store
 from .tools import ToolContext
 from .tune import format_result, tune
 from .views import job_payload
+
+log = logging.getLogger(__name__)
 
 _STATUS_COMMANDS = {"promote": "promoted", "dismiss": "dismissed", "applied": "applied"}
 
@@ -239,7 +243,9 @@ def _cmd_chat(
     transport: httpx.BaseTransport | None,
     now: datetime,
 ) -> int:
-    ctx = ToolContext(config, transport=transport, read_only=args.read_only, now=lambda: now)
+    ctx = ToolContext(
+        config, transport=transport, read_only=args.read_only, origin="chat", now=lambda: now
+    )
     return repl(config, ctx, model=args.model, assume_yes=args.yes, transport=transport)
 
 
@@ -518,6 +524,19 @@ def main(
         print(f"config error: {exc}", file=sys.stderr)
         return 2
 
+    setup_logging(config.log_path, config.log_days)
+    log.info("start: %s", " ".join(argv if argv is not None else sys.argv[1:]))
+    code = _dispatch(config, args, transport, now)
+    log.info("exit %d: %s", code, args.cmd)
+    return code
+
+
+def _dispatch(
+    config: Config,
+    args: argparse.Namespace,
+    transport: httpx.BaseTransport | None,
+    now: datetime,
+) -> int:
     if args.cmd in _STATUS_COMMANDS:
         return _cmd_status(config, args.cmd, args.ids, now)
     if args.cmd == "list":
@@ -581,6 +600,12 @@ def main(
         print(f"      {m.job.url}")
         if m.ranking and m.ranking.summary:
             print(f"      {m.ranking.summary}")
+    log.info(
+        "run done: fetched=%d matched=%d added=%d llm_rejected=%d deferred=%d dry_run=%s",
+        report.fetched, report.matched, len(report.new), report.llm_rejected,
+        report.deferred, args.dry_run,
+    )
     for err in [*report.errors, *warnings]:
+        log.warning("%s", err)
         print(f"warn: {err}", file=sys.stderr)
     return 0

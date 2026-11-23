@@ -8,6 +8,8 @@ cache_days: 14                 # keep every fetched job this long so criteria ca
 # `| # | Role | Company | Apply link | Resume | Cover letter | Status |` table (creating a
 # "Discovered by jobpoller" section if there is none) and never touches rows you wrote.
 queue_path: queue/job_queue.md
+log: jobpoller.log            # run log (rotated, capped at ~9 MB total)
+log_days: 30                   # delete rotated logs older than this
 digest: digest.html            # where `jobpoller digest` writes the static HTML page
 schedule_time: "08:00"         # daily run time for `jobpoller schedule install` (quote it)
 

@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import httpx
+import pytest
 
 from jobpoller.config import load_config
 from jobpoller.store import Store
@@ -140,3 +142,20 @@ def test_add_posting_without_llm_and_bad_input(tmp_path: Path) -> None:
     assert out["created"] is True and out["fit"] is None and out["keyword_score"] is not None
     assert "format" in call_tool(ctx, "add_posting", {"text": POSTING, "format": "pdf"})["error"]
     assert "text" in call_tool(ctx, "add_posting", {})["error"]
+
+
+def test_calls_are_logged_without_posting_text(
+    populated: Path, caplog: pytest.LogCaptureFixture  # noqa: F811
+) -> None:
+    ctx = ctx_for(populated, origin="mcp")
+    job_id = call_tool(ctx, "list_jobs", {})["jobs"][0]["id"]
+    caplog.clear()
+    with caplog.at_level(logging.INFO, logger="jobpoller.tools"):
+        call_tool(ctx, "get_job", {"id": job_id})
+        call_tool(ctx, "get_job", {"id": 99999})
+        call_tool(ctx, "add_posting", {"text": "secret resume-ish text " * 50})
+    lines = [r.getMessage() for r in caplog.records]
+    assert f"[mcp] get_job({{'id': {job_id}}}) ok" in lines[0]
+    assert "Python services" not in lines[0]
+    assert caplog.records[1].levelno == logging.WARNING and "no job with id" in lines[1]
+    assert "secret resume-ish" not in lines[2] and "chars>" in lines[2]

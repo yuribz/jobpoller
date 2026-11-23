@@ -113,5 +113,5 @@ def build_server(ctx: ToolContext) -> MCPServer:
 def serve(config: Config, read_only: bool = False) -> int:
     """Run the server on stdio until the client disconnects."""
     logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
-    build_server(ToolContext(config, read_only=read_only)).run("stdio")
+    build_server(ToolContext(config, read_only=read_only, origin="mcp")).run("stdio")
     return 0
