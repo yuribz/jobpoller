@@ -18,8 +18,8 @@ with a local Ollama model, and queues matches for a human to review and apply to
 
 ## Stack and standards
 
-- Python >= 3.10, `httpx`, `PyYAML`/`ruamel.yaml` (comment-preserving writes), SQLite, `textual`
-  for the TUI. Keep dependencies minimal and justify any new one.
+- Python >= 3.10, `httpx`, `PyYAML`, SQLite (stdlib); optional `mcp` for `jobpoller mcp`.
+  Keep dependencies minimal and justify any new one.
 - `ruff check .`, `mypy --strict jobpoller`, `pytest` must all pass before every commit.
 - Small, typed, single-purpose modules. Pure functions where possible (scoring, parsing,
   rendering) so they test without I/O. Keep the existing architecture:
